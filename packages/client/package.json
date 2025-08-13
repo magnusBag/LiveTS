@@ -1,0 +1,42 @@
+{
+  "name": "@livets/client",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Client-side connector for LiveTS applications",
+  "main": "dist/connector.js",
+  "types": "dist/connector.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "build:watch": "rollup -c --watch",
+    "dev": "rollup -c --watch",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "lint": "eslint src --ext .js,.ts",
+    "lint:fix": "eslint src --ext .js,.ts --fix"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^11.1.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "rollup": "^4.0.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/livets.git",
+    "directory": "packages/client"
+  },
+  "keywords": [
+    "livets",
+    "client",
+    "websocket",
+    "real-time"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "name": "livets-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LiveTS - Real-time server-rendered web applications with TypeScript and Rust",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build:rust && npm run build:core && npm run build:client",
+    "build:rust": "cd packages/rust-core && npm run build",
+    "build:core": "cd packages/core && npm run build",
+    "build:client": "cd packages/client && npm run build",
+    "dev": "npm run build && npm run dev:example",
+    "dev:example": "cd examples/counter && npm run dev",
+    "test": "npm run test --workspaces",
+    "clean": "npm run clean --workspaces && rm -rf node_modules",
+    "setup": "npm install && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "prettier": "^3.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/livets.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "typescript",
+    "rust",
+    "real-time",
+    "server-side-rendering",
+    "websockets",
+    "reactive"
+  ]
+}

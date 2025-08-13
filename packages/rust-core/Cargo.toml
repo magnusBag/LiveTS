@@ -1,0 +1,50 @@
+[package]
+name = "livets-core"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance Rust core for LiveTS framework"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# NAPI-RS for Node.js bindings
+napi = { version = "2.13.0", default-features = false, features = ["napi4"] }
+napi-derive = "2.13.0"
+
+# WebSocket handling
+tungstenite = { version = "0.20", features = ["native-tls"] }
+tokio-tungstenite = "0.20"
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTML parsing and manipulation
+scraper = "0.18"
+html5ever = "0.26"
+regex = "1.10"
+
+# Data structures
+dashmap = "5.5"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[build-dependencies]
+napi-build = "2.0.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
