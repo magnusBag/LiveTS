@@ -1,6 +1,6 @@
 {
   "name": "livets-workspace",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "LiveTS - Real-time server-rendered web applications with TypeScript and Rust",
   "workspaces": [
