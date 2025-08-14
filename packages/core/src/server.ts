@@ -5,6 +5,8 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import WebSocket from 'ws';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { LiveView } from './live-view';
 import type { ServerOptions, ComponentProps, RenderOptions } from './types';
 
@@ -352,60 +354,44 @@ export class LiveTSServer {
   }
 
   private generateConnectorScript(): string {
+    try {
+      // Try to load the built client connector
+      const clientPath = require.resolve('@livets/client/dist/connector.js');
+      return readFileSync(clientPath, 'utf-8');
+    } catch (error) {
+      console.warn('Could not load built client connector, falling back to inline version');
+      // Fallback to a minimal inline connector if package is not available
+      return this.getFallbackConnectorScript();
+    }
+  }
+
+  private getFallbackConnectorScript(): string {
     const wsPort = this.options.port + 1;
     const wsHost = this.options.host;
 
     return `
-// LiveTS Client Connector
-class LiveTSConnector {
+console.log('Using fallback connector - please install @livets/client for full functionality');
+
+// Minimal fallback connector
+class FallbackConnector {
   constructor() {
     this.ws = new WebSocket('ws://${wsHost}:${wsPort}');
     this.setupEventListeners();
-    this.setupDomObserver();
   }
 
   setupEventListeners() {
-    this.ws.onopen = () => {
-      console.log('LiveTS WebSocket connected');
-    };
-
+    this.ws.onopen = () => console.log('LiveTS WebSocket connected');
     this.ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
-      this.handleMessage(message);
+      if (message.type === 'patches') this.applyPatches(message.patches);
     };
+    this.ws.onclose = () => console.log('LiveTS WebSocket disconnected');
+    this.ws.onerror = (error) => console.error('LiveTS WebSocket error:', error);
 
-    this.ws.onclose = () => {
-      console.log('LiveTS WebSocket disconnected');
-      // TODO: Implement reconnection logic
-    };
-
-    this.ws.onerror = (error) => {
-      console.error('LiveTS WebSocket error:', error);
-    };
-
-    // Delegate DOM events
     document.addEventListener('click', this.handleDomEvent.bind(this));
     document.addEventListener('input', this.handleDomEvent.bind(this));
     document.addEventListener('submit', this.handleDomEvent.bind(this));
     document.addEventListener('change', this.handleDomEvent.bind(this));
-  }
-
-  setupDomObserver() {
-    // TODO: Set up MutationObserver for dynamic content
-  }
-
-  handleMessage(message) {
-    switch (message.type) {
-      case 'patches':
-        this.applyPatches(message.patches);
-        break;
-      case 'pong':
-        // Handle ping/pong
-        break;
-      case 'error':
-        console.error('Server error:', message.message);
-        break;
-    }
   }
 
   handleDomEvent(event) {
@@ -417,45 +403,21 @@ class LiveTSConnector {
     
     if (!handler || !componentElement) return;
 
-    const componentId = componentElement.dataset.livetsId;
-    
     event.preventDefault();
     
-    const payload = this.extractEventData(event, element);
-    
-    this.sendEvent(componentId, handler, payload);
-  }
-
-  extractEventData(event, element) {
-    const data = {
-      type: event.type,
-      target: {
-        tagName: element.tagName.toLowerCase(),
-        value: element.value || undefined,
-        checked: element.checked || undefined
-      }
-    };
-
-    // Extract form data for form events
-    if (event.type === 'submit' && element.tagName === 'FORM') {
-      const formData = new FormData(element);
-      const formObj = {};
-      for (const [key, value] of formData) {
-        formObj[key] = value;
-      }
-      data.formData = formObj;
-    }
-
-    return data;
-  }
-
-  sendEvent(componentId, eventName, payload) {
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: 'event',
-        componentId,
-        eventName,
-        payload
+        componentId: componentElement.dataset.livetsId,
+        eventName: handler,
+        payload: {
+          type: event.type,
+          target: {
+            tagName: element.tagName.toLowerCase(),
+            value: element.value,
+            checked: element.checked
+          }
+        }
       }));
     }
   }
@@ -465,32 +427,21 @@ class LiveTSConnector {
       try {
         switch (patch.type) {
           case 'ReplaceText':
+          case 'UpdateText':
             const textEl = document.querySelector(patch.selector);
-            if (textEl) textEl.textContent = patch.content;
+            if (textEl) textEl.textContent = patch.content || patch.text;
             break;
-            
           case 'SetAttribute':
             const attrEl = document.querySelector(patch.selector);
             if (attrEl) attrEl.setAttribute(patch.attr, patch.value);
             break;
-            
           case 'RemoveAttribute':
             const removeAttrEl = document.querySelector(patch.selector);
             if (removeAttrEl) removeAttrEl.removeAttribute(patch.attr);
             break;
-            
           case 'ReplaceInnerHtml':
             const replaceEl = document.querySelector(patch.selector);
             if (replaceEl) replaceEl.innerHTML = patch.html;
-            break;
-            
-          case 'ReplaceElement':
-            const replaceElParent = document.querySelector(patch.selector)?.parentElement;
-            if (replaceElParent) {
-              const temp = document.createElement('div');
-              temp.innerHTML = patch.html;
-              replaceElParent.replaceChild(temp.firstChild, document.querySelector(patch.selector));
-            }
             break;
         }
       } catch (error) {
@@ -500,11 +451,10 @@ class LiveTSConnector {
   }
 }
 
-// Initialize the connector when the DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => new LiveTSConnector());
+  document.addEventListener('DOMContentLoaded', () => new FallbackConnector());
 } else {
-  new LiveTSConnector();
+  new FallbackConnector();
 }
 `;
   }

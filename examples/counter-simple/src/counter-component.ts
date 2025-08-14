@@ -47,12 +47,13 @@ export class CounterComponent extends LiveView {
         <h1 class="text-2xl font-bold text-center mb-6">LiveTS Counter</h1>
 
         <div class="text-center mb-6">
-          <div class="${counterClasses}">${count}</div>
+          <div id="counter-display" class="${counterClasses}">${count}</div>
           <p class="text-gray-600 mt-2">Current count</p>
         </div>
 
         <div class="flex gap-3 justify-center mb-6">
           <button
+            id="decrement-btn"
             ts-on:click="decrement"
             class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
           >
@@ -60,6 +61,7 @@ export class CounterComponent extends LiveView {
           </button>
 
           <button
+            id="increment-btn"
             ts-on:click="increment"
             class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
           >
@@ -68,7 +70,7 @@ export class CounterComponent extends LiveView {
         </div>
 
         <div class="mb-6">
-          <label class="block text-sm font-medium text-gray-700 mb-2"> Step size: ${step} </label>
+          <label id="step-label" class="block text-sm font-medium text-gray-700 mb-2"> Step size: ${step} </label>
           <input
             type="range"
             min="1"
@@ -95,7 +97,7 @@ export class CounterComponent extends LiveView {
           </button>
         </div>
 
-        <div class="mt-6 text-center text-sm text-gray-500">
+        <div id="status-message" class="mt-6 text-center text-sm text-gray-500">
           Count is ${isPositive ? 'positive' : 'negative or zero'}
         </div>
       </div>

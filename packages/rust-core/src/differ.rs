@@ -144,17 +144,12 @@ impl HtmlDiffer {
         best_match
     }
 
-    /// Parse HTML to extract all meaningful elements
+        /// Parse HTML to extract all meaningful elements
     fn parse_elements(&self, html: &str) -> Option<Vec<HtmlElement>> {
         let mut elements = Vec::new();
         
-
-        
         // Regex to match any element with content: <tag attributes>content</tag>
-        // Note: We can't use backreferences, so we'll use a simpler approach
         let element_regex = regex::Regex::new(r#"<(\w+)([^>]*)>([^<]*)</(\w+)>"#).unwrap();
-        
-
         
         for capture in element_regex.captures_iter(html) {
             let open_tag = capture.get(1)?.as_str().to_string();
@@ -170,15 +165,20 @@ impl HtmlDiffer {
                     .map(|m| m.get(1).unwrap().as_str().to_string())
                     .unwrap_or_default();
                 
+                // Extract id attribute
+                let id_regex = regex::Regex::new(r#"id="([^"]*)""#).unwrap();
+                let id = id_regex.captures(attributes)
+                    .map(|m| m.get(1).unwrap().as_str().to_string())
+                    .unwrap_or_default();
+                
                 elements.push(HtmlElement {
                     tag_name: open_tag,
                     classes,
                     text_content,
+                    id,
                 });
             }
         }
-        
-
         
         if elements.is_empty() { None } else { Some(elements) }
     }
@@ -192,13 +192,41 @@ impl HtmlDiffer {
 
     /// Build a specific CSS selector for an element
     fn build_element_selector(&self, base_selector: &str, element: &HtmlElement) -> String {
+        // Strategy 1: Use ID if available (most stable and specific)
+        if !element.id.is_empty() {
+            return format!("#{}", element.id);
+        }
+        
+        // Strategy 2: Use distinguishing classes for elements without IDs
         if !element.classes.is_empty() {
-            // Use the most specific class for targeting
             let classes: Vec<&str> = element.classes.split_whitespace().collect();
+            
+            // Look for a unique distinguishing class (like bg-red-500, bg-blue-500)
+            for class in &classes {
+                if class.starts_with("bg-") || class.starts_with("text-") || class.contains("primary") || class.contains("secondary") {
+                    return format!("{} .{}", base_selector, class);
+                }
+            }
+            
+            // Use multiple classes to create a more specific selector
+            if classes.len() >= 2 {
+                return format!("{} .{}.{}", base_selector, classes[0], classes[1]);
+            }
+            
+            // Single class fallback
             if let Some(first_class) = classes.first() {
                 return format!("{} .{}", base_selector, first_class);
             }
         }
+        
+        // Strategy 3: Use text content as additional specificity for short text
+        if !element.text_content.is_empty() && element.text_content.len() <= 10 {
+            return format!("{}:contains('{}')", 
+                format!("{} {}", base_selector, element.tag_name),
+                element.text_content.replace("'", "\\'")
+            );
+        }
+        
         // Fallback to tag name
         format!("{} {}", base_selector, element.tag_name)
     }
@@ -210,6 +238,7 @@ struct HtmlElement {
     tag_name: String,
     classes: String,
     text_content: String,
+    id: String,
 }
 
 impl Default for HtmlDiffer {
@@ -332,6 +361,158 @@ mod tests {
             assert_eq!(value, "btn btn-primary enabled");
         } else {
             panic!("Expected SetAttribute patch, got {:?}", patches[0]);
+        }
+    }
+
+    #[test]
+    fn test_multiple_buttons_with_similar_classes() {
+        let differ = HtmlDiffer::new();
+        
+        // Test with multiple buttons that share CSS classes (like counter buttons)
+        let old_html = r#"
+            <button class="px-4 py-2 bg-red-500 text-white">-1</button>
+            <button class="px-4 py-2 bg-blue-500 text-white">+1</button>
+        "#;
+        let new_html = r#"
+            <button class="px-4 py-2 bg-red-500 text-white">-4</button>
+            <button class="px-4 py-2 bg-blue-500 text-white">+4</button>
+        "#;
+        
+        let patches = differ.diff(old_html, new_html).unwrap();
+        
+        // Should generate 2 patches: one for each button's text change
+        assert_eq!(patches.len(), 2);
+        
+        // Find the patches for each button
+        let mut decrement_patch = None;
+        let mut increment_patch = None;
+        
+        for patch in &patches {
+            if let DomPatch::UpdateText { text, selector } = patch {
+                if text == "-4" {
+                    decrement_patch = Some((selector, text));
+                } else if text == "+4" {
+                    increment_patch = Some((selector, text));
+                }
+            }
+        }
+        
+        assert!(decrement_patch.is_some(), "Should find decrement button patch");
+        assert!(increment_patch.is_some(), "Should find increment button patch");
+        
+        // Selectors should be different to target different buttons
+        let (dec_selector, _) = decrement_patch.unwrap();
+        let (inc_selector, _) = increment_patch.unwrap();
+        assert_ne!(dec_selector, inc_selector, "Selectors should be different for different buttons");
+    }
+
+    #[test]
+    fn test_counter_with_number_change_and_class_change() {
+        let differ = HtmlDiffer::new();
+        
+        // Test simulating the counter scenario: number changes, class changes, buttons change
+        let old_html = r#"
+            <div class="text-center mb-6">
+                <div class="text-green-600 font-bold text-4xl">5</div>
+                <p class="text-gray-600 mt-2">Current count</p>
+            </div>
+            <div class="flex gap-3 justify-center mb-6">
+                <button class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">-1</button>
+                <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">+1</button>
+            </div>
+        "#;
+        
+        let new_html = r#"
+            <div class="text-center mb-6">
+                <div class="text-red-600 font-bold text-4xl">-42</div>
+                <p class="text-gray-600 mt-2">Current count</p>
+            </div>
+            <div class="flex gap-3 justify-center mb-6">
+                <button class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">-1</button>
+                <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">+1</button>
+            </div>
+        "#;
+        
+        let patches = differ.diff(old_html, new_html).unwrap();
+        
+        // Should generate patches for both the counter display (class + text) changes
+        // Buttons should remain unchanged in this scenario
+        assert!(patches.len() >= 2, "Should generate at least 2 patches for counter display changes");
+        
+        // Check that we have class and text patches for the counter display
+        let mut has_class_patch = false;
+        let mut has_text_patch = false;
+        
+        for patch in &patches {
+            match patch {
+                DomPatch::SetAttribute { attr, value, .. } if attr == "class" => {
+                    if value.contains("text-red-600") {
+                        has_class_patch = true;
+                    }
+                }
+                DomPatch::UpdateText { text, .. } => {
+                    if text == "-42" {
+                        has_text_patch = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+        
+        assert!(has_class_patch, "Should have class change patch for color change");
+        assert!(has_text_patch, "Should have text change patch for number change");
+    }
+
+    #[test]
+    fn test_random_button_edge_cases() {
+        let differ = HtmlDiffer::new();
+        
+        // Case 1: Same count, different sign (should generate class change only)
+        let old_html = r#"<div class="text-green-600 font-bold text-4xl">5</div>"#;
+        let new_html = r#"<div class="text-red-600 font-bold text-4xl">-5</div>"#;
+        
+        let patches = differ.diff(old_html, new_html).unwrap();
+        assert_eq!(patches.len(), 2, "Should generate both class and text patches for 5 -> -5");
+        
+        // Case 2: Same absolute value, no sign change (should generate text change only)
+        let old_html2 = r#"<div class="text-green-600 font-bold text-4xl">5</div>"#;
+        let new_html2 = r#"<div class="text-green-600 font-bold text-4xl">7</div>"#;
+        
+        let patches2 = differ.diff(old_html2, new_html2).unwrap();
+        assert_eq!(patches2.len(), 1, "Should generate only text patch for 5 -> 7 (same sign)");
+        
+        // Case 3: Exact same value (should generate no patches)
+        let old_html3 = r#"<div class="text-green-600 font-bold text-4xl">5</div>"#;
+        let new_html3 = r#"<div class="text-green-600 font-bold text-4xl">5</div>"#;
+        
+        let patches3 = differ.diff(old_html3, new_html3).unwrap();
+        assert_eq!(patches3.len(), 0, "Should generate no patches for identical content");
+    }
+
+    #[test]
+    fn test_id_based_selectors() {
+        let differ = HtmlDiffer::new();
+        
+        // Test with elements that have IDs - should use stable ID selectors
+        let old_html = r#"<div id="counter-display" class="text-green-600 font-bold text-4xl">5</div>"#;
+        let new_html = r#"<div id="counter-display" class="text-red-600 font-bold text-4xl">-42</div>"#;
+        
+        let patches = differ.diff(old_html, new_html).unwrap();
+        
+        // Should generate 2 patches: class change and text change
+        assert_eq!(patches.len(), 2);
+        
+        // Both patches should use the stable ID selector
+        for patch in &patches {
+            match patch {
+                DomPatch::SetAttribute { selector, .. } => {
+                    assert_eq!(selector, "#counter-display", "Should use ID selector for class change");
+                }
+                DomPatch::UpdateText { selector, .. } => {
+                    assert_eq!(selector, "#counter-display", "Should use ID selector for text change");
+                }
+                _ => panic!("Unexpected patch type"),
+            }
         }
     }
 }
