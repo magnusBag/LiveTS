@@ -12,7 +12,7 @@ import type { ServerOptions, ComponentProps, RenderOptions } from './types';
 // Import the Rust core engine
 let LiveTSEngine: any;
 try {
-  const rustCore = require('@livets/rust-core');
+  const rustCore = require('@magnusbag/livets-rust-core');
   LiveTSEngine = rustCore.LiveTsEngine; // Note: lowercase 's' in generated binding
 } catch (error) {
   console.warn('Rust core not available, using fallback JavaScript implementation');
@@ -363,7 +363,7 @@ export class LiveTSServer {
   private generateConnectorScript(): string {
     try {
       // Try to load the built client connector
-      const clientPath = require.resolve('@livets/client/dist/connector.js');
+      const clientPath = require.resolve('@magnusbag/livets-client/dist/connector.js');
       return readFileSync(clientPath, 'utf-8');
     } catch (error) {
       console.warn('Could not load built client connector, falling back to inline version');
@@ -377,7 +377,7 @@ export class LiveTSServer {
     const wsHost = this.options.host;
 
     return `
-console.log('Using fallback connector - please install @livets/client for full functionality');
+console.log('Using fallback connector - please install @magnusbag/livets-client for full functionality');
 
 // Minimal fallback connector
 class FallbackConnector {

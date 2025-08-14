@@ -151,15 +151,15 @@ jobs:
       - name: Publish packages
         run: |
           # Publish packages in dependency order
-          echo "Publishing @livets/rust-core..."
+          echo "Publishing @magnusbag/livets-rust-core..."
           cd packages/rust-core
           npm publish --access public --verbose
 
-          echo "Publishing @livets/core..."
+          echo "Publishing @magnusbag/livets-core..."
           cd ../core
           npm publish --access public --verbose
 
-          echo "Publishing @livets/client..."
+          echo "Publishing @magnusbag/livets-client..."
           cd ../client
           npm publish --access public --verbose
         env:
@@ -195,7 +195,7 @@ jobs:
 
             ### Installation
             ```bash
-            npm install @livets/core @livets/client @livets/rust-core
+            npm install @magnusbag/livets-core @magnusbag/livets-client @magnusbag/livets-rust-core
             ```
 
             See the [documentation](https://github.com/${{ github.repository }}) for usage examples.

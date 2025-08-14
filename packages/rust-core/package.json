@@ -1,5 +1,5 @@
 {
-  "name": "@livets/rust-core",
+  "name": "@magnusbag/livets-rust-core",
   "version": "0.1.0",
   "description": "High-performance Rust core for LiveTS framework - real-time server-rendered web applications",
   "main": "index.js",

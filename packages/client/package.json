@@ -1,5 +1,5 @@
 {
-  "name": "@livets/client",
+  "name": "@magnusbag/livets-client",
   "version": "0.1.0",
   "type": "module",
   "description": "Client-side connector for LiveTS framework - real-time server-rendered web applications",
@@ -46,17 +46,5 @@
     "rollup": "^4.0.0",
     "tslib": "^2.6.0",
     "typescript": "^5.0.0"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/livets.git",
-    "directory": "packages/client"
-  },
-  "keywords": [
-    "livets",
-    "client",
-    "websocket",
-    "real-time"
-  ]
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@livets/core",
+  "name": "@magnusbag/livets-core",
   "version": "0.1.0",
   "description": "TypeScript API layer for LiveTS framework",
   "main": "dist/index.js",
@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.18.2",
-    "@livets/client": "^0.1.0",
+    "@magnusbag/livets-client": "^0.1.0",
     "hono": "^4.0.0",
     "uuid": "^9.0.0",
     "ws": "^8.14.0"
