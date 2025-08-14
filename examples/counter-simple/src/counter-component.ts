@@ -70,7 +70,9 @@ export class CounterComponent extends LiveView {
         </div>
 
         <div class="mb-6">
-          <label id="step-label" class="block text-sm font-medium text-gray-700 mb-2"> Step size: ${step} </label>
+          <label id="step-label" class="block text-sm font-medium text-gray-700 mb-2">
+            Step size: ${step}
+          </label>
           <input
             type="range"
             min="1"
