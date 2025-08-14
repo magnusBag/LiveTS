@@ -115,7 +115,7 @@ jobs:
           cp artifacts/binaries-*/*.node packages/rust-core/ 2>/dev/null || true
           # Create npm directory structure expected by napi
           mkdir -p packages/rust-core/npm/linux-x64-gnu
-          mkdir -p packages/rust-core/npm/win32-x64-msvc  
+          mkdir -p packages/rust-core/npm/win32-x64-msvc
           mkdir -p packages/rust-core/npm/darwin-x64
           mkdir -p packages/rust-core/npm/darwin-arm64
           # Copy files to expected npm locations based on filename patterns
@@ -124,7 +124,7 @@ jobs:
               filename=$(basename "$file")
               echo "Processing: $filename"
               case "$filename" in
-                *linux*) 
+                *linux*)
                   cp "$file" "packages/rust-core/npm/linux-x64-gnu/livets-core.linux-x64-gnu.node"
                   ;;
                 *win32*|*windows*)
@@ -151,16 +151,16 @@ jobs:
         run: |
           # Configure npm authentication
           npm config set //registry.npmjs.org/:_authToken $NODE_AUTH_TOKEN
-          
+
           # Publish packages in dependency order
           echo "Publishing @livets/rust-core..."
           cd packages/rust-core
           npm publish --access public --verbose
-          
+
           echo "Publishing @livets/core..."
           cd ../core
           npm publish --access public --verbose
-          
+
           echo "Publishing @livets/client..."
           cd ../client
           npm publish --access public --verbose
