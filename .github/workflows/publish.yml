@@ -87,6 +87,7 @@ jobs:
     name: Publish to NPM
     runs-on: ubuntu-latest
     needs: build
+    environment: Publish-env
 
     steps:
       - uses: actions/checkout@v4
@@ -149,9 +150,6 @@ jobs:
 
       - name: Publish packages
         run: |
-          # Configure npm authentication
-          npm config set //registry.npmjs.org/:_authToken $NODE_AUTH_TOKEN
-
           # Publish packages in dependency order
           echo "Publishing @livets/rust-core..."
           cd packages/rust-core
