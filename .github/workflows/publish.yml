@@ -111,20 +111,59 @@ jobs:
           echo "Downloaded artifacts:"
           find artifacts -name "*.node" -ls || echo "No .node files found"
           echo "Moving artifacts to packages/rust-core/"
-          cp artifacts/binaries-*/livets_core.*.node packages/rust-core/ || true
-          cp artifacts/binaries-*/*.node packages/rust-core/ || true
+          # Copy all .node files from artifacts to rust-core root
+          cp artifacts/binaries-*/*.node packages/rust-core/ 2>/dev/null || true
+          # Create npm directory structure expected by napi
+          mkdir -p packages/rust-core/npm/linux-x64-gnu
+          mkdir -p packages/rust-core/npm/win32-x64-msvc  
+          mkdir -p packages/rust-core/npm/darwin-x64
+          mkdir -p packages/rust-core/npm/darwin-arm64
+          # Copy files to expected npm locations based on filename patterns
+          for file in packages/rust-core/*.node; do
+            if [[ -f "$file" ]]; then
+              filename=$(basename "$file")
+              echo "Processing: $filename"
+              case "$filename" in
+                *linux*) 
+                  cp "$file" "packages/rust-core/npm/linux-x64-gnu/livets-core.linux-x64-gnu.node"
+                  ;;
+                *win32*|*windows*)
+                  cp "$file" "packages/rust-core/npm/win32-x64-msvc/livets-core.win32-x64-msvc.node"
+                  ;;
+                *darwin*x86_64*|*darwin*x64*)
+                  cp "$file" "packages/rust-core/npm/darwin-x64/livets-core.darwin-x64.node"
+                  ;;
+                *darwin*aarch64*|*darwin*arm64*)
+                  cp "$file" "packages/rust-core/npm/darwin-arm64/livets-core.darwin-arm64.node"
+                  ;;
+              esac
+            fi
+          done
           echo "Files in packages/rust-core after moving artifacts:"
           ls -la packages/rust-core/
+          echo "Files in npm directories:"
+          find packages/rust-core/npm -name "*.node" -ls 2>/dev/null || echo "No files in npm directories yet"
 
       - name: Build all packages
         run: npm run build
 
       - name: Publish packages
         run: |
+          # Configure npm authentication
+          npm config set //registry.npmjs.org/:_authToken $NODE_AUTH_TOKEN
+          
           # Publish packages in dependency order
-          cd packages/rust-core && npm publish --access public
-          cd ../core && npm publish --access public
-          cd ../client && npm publish --access public
+          echo "Publishing @livets/rust-core..."
+          cd packages/rust-core
+          npm publish --access public --verbose
+          
+          echo "Publishing @livets/core..."
+          cd ../core
+          npm publish --access public --verbose
+          
+          echo "Publishing @livets/client..."
+          cd ../client
+          npm publish --access public --verbose
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

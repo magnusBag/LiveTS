@@ -58,7 +58,6 @@
     "artifacts": "napi artifacts",
     "build": "npx napi build --platform --release",
     "build:debug": "npx napi build --platform",
-    "prepublishOnly": "npx napi prepublish -t npm",
     "test": "ava",
     "universal": "npx napi universal",
     "version": "npx napi version"
