@@ -113,13 +113,6 @@ export class CounterComponent extends LiveView {
       count: newCount,
       isPositive: newCount > 0
     });
-
-    // Broadcast the update
-    this.broadcast('counter-updates', {
-      action: 'increment',
-      count: newCount,
-      step: this.state.step
-    });
   }
 
   decrement(): void {
@@ -128,25 +121,12 @@ export class CounterComponent extends LiveView {
       count: newCount,
       isPositive: newCount > 0
     });
-
-    // Broadcast the update
-    this.broadcast('counter-updates', {
-      action: 'decrement',
-      count: newCount,
-      step: this.state.step
-    });
   }
 
   reset(): void {
     this.setState({
       count: 0,
       isPositive: true
-    });
-
-    // Broadcast the update
-    this.broadcast('counter-updates', {
-      action: 'reset',
-      count: 0
     });
   }
 
@@ -155,12 +135,6 @@ export class CounterComponent extends LiveView {
     this.setState({
       count: newCount,
       isPositive: newCount > 0
-    });
-
-    // Broadcast the update
-    this.broadcast('counter-updates', {
-      action: 'random',
-      count: newCount
     });
   }
 

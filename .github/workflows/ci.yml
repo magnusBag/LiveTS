@@ -67,19 +67,19 @@ jobs:
             build: |
               cd packages/rust-core
               npm run build
-              strip *.node
+              find . -name "*.node" -exec strip {} \;
           - host: macos-latest
             target: x86_64-apple-darwin
             build: |
               cd packages/rust-core
               npm run build
-              strip -x *.node
+              find . -name "*.node" -exec strip -x {} \;
           - host: macos-latest
             target: aarch64-apple-darwin
             build: |
               cd packages/rust-core
               npm run build --target aarch64-apple-darwin
-              strip -x *.node
+              find . -name "*.node" -exec strip -x {} \;
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             build: |
