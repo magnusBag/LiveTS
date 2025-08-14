@@ -121,14 +121,6 @@ jobs:
       - name: Build native module
         run: ${{ matrix.settings.build }}
 
-      - name: Debug - List all files in rust-core directory
-        run: |
-          cd packages/rust-core
-          echo "Files in packages/rust-core:"
-          ls -la
-          echo "Looking for .node files specifically:"
-          find . -name "*.node" -ls || echo "No .node files found"
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
