@@ -76,20 +76,12 @@ jobs:
       - name: Build native module
         run: ${{ matrix.settings.build }}
 
-      - name: Debug - List all files in rust-core directory
-        run: |
-          cd packages/rust-core
-          echo "Files in packages/rust-core:"
-          ls -la
-          echo "Looking for .node files specifically:"
-          find . -name "*.node" -ls || echo "No .node files found"
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.settings.target }}
           path: packages/rust-core/*.node
-          if-no-files-found: warn
+          if-no-files-found: error
 
   publish:
     name: Publish to NPM
@@ -106,9 +98,6 @@ jobs:
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Install dependencies
         run: npm ci
 
@@ -117,9 +106,14 @@ jobs:
         with:
           path: artifacts
 
-      - name: Move artifacts to packages
+      - name: Move artifacts to rust-core package
         run: |
+          echo "Downloaded artifacts:"
+          find artifacts -name "*.node" -ls || echo "No .node files found"
+          echo "Moving artifacts to packages/rust-core/"
           cp artifacts/binaries-*/livets_core.*.node packages/rust-core/ || true
+          cp artifacts/binaries-*/*.node packages/rust-core/ || true
+          echo "Files in packages/rust-core after moving artifacts:"
           ls -la packages/rust-core/
 
       - name: Build all packages
