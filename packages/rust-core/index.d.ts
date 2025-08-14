@@ -11,3 +11,20 @@ export declare class LiveTsEngine {
   /** Renders a component and returns the diff patches */
   renderComponent(componentId: string, oldHtml: string, newHtml: string): Array<number>
 }
+export type LiveTSWebSocketBroker = LiveTsWebSocketBroker
+/** Tokio-based WebSocket broker running inside the Rust core */
+export declare class LiveTsWebSocketBroker {
+  constructor()
+  /** Register a JS callback that receives broker events as JSON strings */
+  setEventHandler(callback: (...args: any[]) => any): NapiResult
+  /** Start listening on a TCP port for WebSocket upgrades (ws://host:port/livets-ws) */
+  listen(host: string, port: number): void
+  /** Stop the listener and close all connections */
+  stop(): void
+  /** Send a JSON-stringified message to a specific connection */
+  sendToConnection(connectionId: string, message: string): void
+  /** Register a component to a connection (for targeted broadcasts) */
+  registerComponent(componentId: string, connectionId: string): void
+  /** Unregister a component from a connection */
+  unregisterComponent(componentId: string, connectionId: string): void
+}

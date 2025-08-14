@@ -22,7 +22,6 @@ export class CounterComponent extends LiveView {
     this.setState({
       count: 0,
       step: 1,
-      isPositive: true
     });
 
     // Subscribe to pub/sub events (example)
@@ -34,7 +33,8 @@ export class CounterComponent extends LiveView {
   }
 
   render(): string {
-    const { count, step, isPositive } = this.state;
+    const { count, step } = this.state;
+    const isPositive = count > 0;
 
     const counterClasses = classNames({
       'text-green-600': isPositive,
@@ -108,33 +108,27 @@ export class CounterComponent extends LiveView {
 
   // Event handlers
   increment(): void {
-    const newCount = this.state.count + this.state.step;
     this.setState({
-      count: newCount,
-      isPositive: newCount > 0
+      count: this.state.count + this.state.step,
     });
   }
 
   decrement(): void {
-    const newCount = this.state.count - this.state.step;
     this.setState({
-      count: newCount,
-      isPositive: newCount > 0
+      count: this.state.count - this.state.step,
     });
   }
 
   reset(): void {
     this.setState({
-      count: 0,
-      isPositive: true
+      count: 0
     });
   }
 
   random(): void {
     const newCount = Math.floor(Math.random() * 201) - 100; // Random between -100 and 100
     this.setState({
-      count: newCount,
-      isPositive: newCount > 0
+      count: newCount
     });
   }
 

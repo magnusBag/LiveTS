@@ -310,6 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { LiveTsEngine } = nativeBinding
+const { LiveTsEngine, LiveTsWebSocketBroker } = nativeBinding
 
 module.exports.LiveTsEngine = LiveTsEngine
+module.exports.LiveTsWebSocketBroker = LiveTsWebSocketBroker

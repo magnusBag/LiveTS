@@ -284,6 +284,11 @@ class LiveTSConnector {
   }
 
   private getWebSocketUrl(): string {
+    // Allow server to inject a custom WS URL (e.g., Rust broker on different port)
+    const override = (window as any).LIVETS_WS_URL as string | undefined;
+    if (override && typeof override === 'string') {
+      return override;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     return `${protocol}//${host}/livets-ws`;

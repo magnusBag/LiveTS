@@ -11,12 +11,15 @@ import type { ServerOptions, ComponentProps, RenderOptions } from './types';
 
 // Import the Rust core engine
 let LiveTSEngine: any;
+let LiveTSWebSocketBroker: any;
 try {
   const rustCore = require('@magnusbag/livets-rust-core');
   LiveTSEngine = rustCore.LiveTsEngine; // Note: lowercase 's' in generated binding
+  LiveTSWebSocketBroker = rustCore.LiveTsWebSocketBroker;
 } catch (error) {
   console.warn('Rust core not available, using fallback JavaScript implementation');
   LiveTSEngine = null;
+  LiveTSWebSocketBroker = null;
 }
 
 export class LiveTSServer {
@@ -28,6 +31,9 @@ export class LiveTSServer {
   private componentHtmlCache: Map<string, string> = new Map(); // Cache for HTML diffing
   private options: Required<ServerOptions>;
   private rustEngine?: any;
+  // Rust WS broker and mapping of connection->components
+  private rustBroker?: any;
+  private brokerConnComponents: Map<string, Set<string>> = new Map();
 
   constructor(options: ServerOptions = {}) {
     this.options = {
@@ -37,13 +43,18 @@ export class LiveTSServer {
       static: options.static ?? { root: './public', prefix: '/' }
     };
 
-    // Initialize Rust engine if available
+    // Initialize Rust engine/broker if available
     if (LiveTSEngine) {
       this.rustEngine = new LiveTSEngine();
       console.log('🦀 Rust core engine initialized');
     } else {
       console.log('📝 Using JavaScript fallback for DOM manipulation');
     }
+
+    // Temporarily disable Rust broker due to NAPI threadsafe function bug
+    // and fall back to Node.js WebSocket server
+    console.log('⚠️  Temporarily using Node.js WebSocket server instead of Rust broker');
+    this.rustBroker = undefined;
 
     this.app = new Hono();
     this.setupMiddleware();
@@ -122,6 +133,12 @@ export class LiveTSServer {
       this.server.close();
     }
 
+    if (this.rustBroker) {
+      try {
+        this.rustBroker.stop();
+      } catch {}
+    }
+
     // Clean up active components
     for (const component of this.activeComponents.values()) {
       await component._unmount();
@@ -186,6 +203,12 @@ export class LiveTSServer {
   }
 
   private setupWebSocketServer(server: any): void {
+    // If Rust broker is available, do not start Node ws server
+    if (this.rustBroker) {
+      console.log('Using Rust WS broker; skipping Node ws server.');
+      return;
+    }
+
     this.wss = new WebSocket.Server({ noServer: true });
 
     server.on('upgrade', (request: any, socket: any, head: any) => {
@@ -215,7 +238,6 @@ export class LiveTSServer {
 
       ws.on('close', () => {
         console.log(`WebSocket connection closed: ${connectionId}`);
-        // TODO: Clean up component associations
       });
 
       ws.on('error', error => {
@@ -226,106 +248,211 @@ export class LiveTSServer {
     console.log(`WebSocket server is running on the same port as the HTTP server.`);
   }
 
+  private async handleBrokerEvent(evtJson: string): Promise<void> {
+    try {
+      console.log('📨 Received broker event:', evtJson);
+
+      // Handle empty or null JSON strings
+      if (!evtJson || evtJson.trim() === '' || evtJson === 'null') {
+        console.warn('⚠️  Received empty or null event JSON:', evtJson);
+        return;
+      }
+
+      const evt = JSON.parse(evtJson);
+
+      // Additional null check after parsing
+      if (!evt || typeof evt !== 'object') {
+        console.warn('⚠️  Parsed event is null or not an object:', evt);
+        return;
+      }
+
+      if (!evt.type) {
+        console.warn('⚠️  Event missing type property:', evt);
+        return;
+      }
+
+      console.log('✅ Processing broker event type:', evt.type);
+      switch (evt.type) {
+        case 'Connected':
+          // Optionally handle new connections
+          break;
+        case 'Message': {
+          const { connectionId, data } = evt;
+          const message = JSON.parse(data);
+          await this.handleBrokerMessage(connectionId, message);
+          break;
+        }
+        case 'Closed': {
+          // Cleanup component registrations for this connection
+          const connectionId = evt.connectionId as string;
+          const set = this.brokerConnComponents.get(connectionId);
+          if (set && this.rustBroker) {
+            for (const componentId of set) {
+              try {
+                this.rustBroker.unregisterComponent(componentId, connectionId);
+              } catch {}
+            }
+          }
+          this.brokerConnComponents.delete(connectionId);
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('Error in broker event handler:', e);
+    }
+  }
+
+  private async handleBrokerMessage(connectionId: string, message: any): Promise<void> {
+    switch (message.type) {
+      case 'event':
+        await this.handleClientEventFromBroker(connectionId, message);
+        break;
+      case 'ping':
+        // The broker responds to ping internally; no-op here
+        break;
+      default:
+        console.warn(`Unknown broker message type: ${message.type}`);
+    }
+  }
+
+  private async handleClientEventFromBroker(connectionId: string, message: any): Promise<void> {
+    const { componentId, eventName, payload } = message;
+
+    // track registration to avoid duplicates
+    let set = this.brokerConnComponents.get(connectionId);
+    if (!set) {
+      set = new Set();
+      this.brokerConnComponents.set(connectionId, set);
+    }
+    if (!set.has(componentId)) {
+      try {
+        this.rustBroker.registerComponent(componentId, connectionId);
+      } catch {}
+      set.add(componentId);
+    }
+
+    const patches = await this.processEventAndDiff(componentId, eventName, payload);
+
+    if (!patches) return;
+
+    const msg = JSON.stringify({ type: 'patches', componentId, patches });
+    try {
+      this.rustBroker.sendToConnection(connectionId, msg);
+    } catch (e) {
+      console.error('Failed sending patches via broker:', e);
+    }
+  }
+
   private async handleWebSocketMessage(
     connectionId: string,
     message: any,
     ws: WebSocket
   ): Promise<void> {
     switch (message.type) {
-      case 'event':
-        await this.handleClientEvent(message, ws);
+      case 'event': {
+        const patches = await this.processEventAndDiff(
+          message.componentId,
+          message.eventName,
+          message.payload
+        );
+        if (!patches) return;
+        ws.send(
+          JSON.stringify({
+            type: 'patches',
+            componentId: message.componentId,
+            patches
+          })
+        );
         break;
-
+      }
       case 'ping':
         ws.send(JSON.stringify({ type: 'pong' }));
         break;
-
       default:
         console.warn(`Unknown message type: ${message.type}`);
     }
   }
 
-  private async handleClientEvent(message: any, ws: WebSocket): Promise<void> {
-    const { componentId, eventName, payload } = message;
-
+  private async processEventAndDiff(
+    componentId: string,
+    eventName: string,
+    payload: any
+  ): Promise<any[] | null> {
     const component = this.activeComponents.get(componentId);
     if (!component) {
-      console.warn(`Component not found: ${componentId}`);
-      return;
+      console.warn(`Component not found for id: ${componentId}`);
+      return null;
     }
+
+    const oldHtml = this.componentHtmlCache.get(componentId) ?? component._render();
 
     try {
-      // Get the old HTML for diffing
-      const oldHtml = this.componentHtmlCache.get(componentId) || '';
+      await Promise.resolve(component.handleEvent(eventName, payload));
+    } catch (e) {
+      console.error(`Error handling event '${eventName}' for component ${componentId}:`, e);
+      return null;
+    }
 
-      // Handle the event
-      await component.handleEvent(eventName, payload);
+    let newHtml: string;
+    try {
+      newHtml = component._render();
+    } catch (e) {
+      console.error(`Error rendering component after event for ${componentId}:`, e);
+      return null;
+    }
 
-      // Re-render the component
-      const newHtml = component._render();
+    // Update cache with latest HTML
+    this.componentHtmlCache.set(componentId, newHtml);
 
-      // Cache the new HTML
-      this.componentHtmlCache.set(componentId, newHtml);
-
-      // Generate diff patches using Rust core (if available)
-      let patches;
-      if (this.rustEngine && oldHtml) {
-        try {
-          console.debug('🦀 Using Rust core for HTML diffing');
-          const patchBytes = await this.rustEngine.renderComponent(componentId, oldHtml, newHtml);
-          patches = JSON.parse(Buffer.from(patchBytes).toString());
-          console.debug('🎯 Generated', patches.length, 'patches using Rust');
-        } catch (rustError) {
-          console.warn('Rust diffing failed, falling back to JavaScript:', rustError);
-          patches = this.fallbackDiff(componentId, oldHtml, newHtml);
+    // Compute patches
+    try {
+      if (this.rustEngine && typeof this.rustEngine.renderComponent === 'function') {
+        const result = this.rustEngine.renderComponent(componentId, oldHtml, newHtml);
+        if (typeof result === 'string') {
+          try {
+            return JSON.parse(result);
+          } catch {}
         }
-      } else {
-        console.log('📝 Using JavaScript fallback for diffing');
-        patches = this.fallbackDiff(componentId, oldHtml, newHtml);
+        // Buffer or Uint8Array
+        if (
+          typeof Buffer !== 'undefined' &&
+          (Buffer.isBuffer(result) || result?.constructor?.name === 'Uint8Array')
+        ) {
+          try {
+            const buf: Buffer = Buffer.isBuffer(result) ? result : Buffer.from(result);
+            return JSON.parse(buf.toString('utf-8'));
+          } catch {}
+        }
+        // Already an object/array
+        if (Array.isArray(result)) return result;
       }
+    } catch (e) {
+      console.warn('Rust engine diff failed, falling back to full replace:', e);
+    }
 
-      // Send patches to client
-      ws.send(
-        JSON.stringify({
-          type: 'patches',
-          componentId,
-          patches
-        })
-      );
+    // Fallback: replace the entire component inner HTML
+    return [
+      {
+        type: 'ReplaceInnerHtml',
+        selector: `[data-livets-id="${componentId}"]`,
+        html: newHtml
+      }
+    ];
+  }
+
+  private generateConnectorScript(): string {
+    try {
+      // Try to load the built client connector
+      const clientPath = require.resolve('@magnusbag/livets-client/dist/connector.js');
+      return readFileSync(clientPath, 'utf-8');
     } catch (error) {
-      console.error(`Error handling event ${eventName} for component ${componentId}:`, error);
-      ws.send(
-        JSON.stringify({
-          type: 'error',
-          message: 'Error processing event'
-        })
-      );
+      console.warn('Could not load built client connector, falling back to inline version');
+      // Fallback to a minimal inline connector if package is not available
+      return this.getFallbackConnectorScript();
     }
   }
 
-  private extractPropsFromContext(c: any): ComponentProps {
-    // Extract props from query parameters and request body
-    const query = c.req.query();
-    return { ...query };
-  }
-
-  /**
-   * Fallback JavaScript implementation for HTML diffing
-   */
-  private fallbackDiff(componentId: string, oldHtml: string, newHtml: string): any[] {
-    // Simple fallback: if content is different, replace the entire innerHTML
-    if (oldHtml.trim() !== newHtml.trim()) {
-      return [
-        {
-          type: 'ReplaceInnerHtml',
-          selector: `[data-livets-id="${componentId}"]`,
-          html: newHtml
-        }
-      ];
-    }
-    return []; // No changes
-  }
-
+  // Injects page layout with optional WS URL override when using Rust broker
   private wrapInLayout(html: string, options?: RenderOptions): string {
     const title = options?.title ?? 'LiveTS App';
     const meta = options?.meta ?? {};
@@ -339,6 +466,11 @@ export class LiveTSServer {
     const styleTags = styles.map(href => `<link rel="stylesheet" href="${href}">`).join('\n    ');
 
     const scriptTags = scripts.map(src => `<script src="${src}"></script>`).join('\n    ');
+
+    // If broker is active, inject a global override for the client to use
+    const wsOverrideScript = this.rustBroker
+      ? `<script>window.LIVETS_WS_URL = "${this.getBrokerWsUrl()}";</script>`
+      : '';
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -354,36 +486,38 @@ export class LiveTSServer {
         ${html}
     </div>
 
+    ${wsOverrideScript}
     <script src="/livets/connector.js"></script>
     ${scriptTags}
 </body>
 </html>`;
   }
 
-  private generateConnectorScript(): string {
-    try {
-      // Try to load the built client connector
-      const clientPath = require.resolve('@magnusbag/livets-client/dist/connector.js');
-      return readFileSync(clientPath, 'utf-8');
-    } catch (error) {
-      console.warn('Could not load built client connector, falling back to inline version');
-      // Fallback to a minimal inline connector if package is not available
-      return this.getFallbackConnectorScript();
-    }
+  private getBrokerWsUrl(): string {
+    const wsPort = this.options.port + 1;
+    // We default to ws:// for dev server; users can front with TLS if needed
+    const protocol = 'ws://';
+    const host = this.options.host;
+    return `${protocol}${host}:${wsPort}`;
   }
 
   private getFallbackConnectorScript(): string {
-    const wsPort = this.options.port + 1;
-    const wsHost = this.options.host;
-
+    // Construct a small connector that resolves WS URL at runtime
     return `
 console.log('Using fallback connector - please install @magnusbag/livets-client for full functionality');
 
 // Minimal fallback connector
 class FallbackConnector {
   constructor() {
-    this.ws = new WebSocket('ws://${wsHost}:${wsPort}');
+    this.ws = new WebSocket(this.getWsUrl());
     this.setupEventListeners();
+  }
+
+  getWsUrl() {
+    if (window.LIVETS_WS_URL) return window.LIVETS_WS_URL;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    return protocol + '//' + host + '/livets-ws';
   }
 
   setupEventListeners() {
@@ -468,6 +602,16 @@ if (document.readyState === 'loading') {
 
   private generateConnectionId(): string {
     return Math.random().toString(36).substring(2, 15);
+  }
+
+  // Extract props from Hono context (query params only for now)
+  private extractPropsFromContext(c: any): ComponentProps {
+    try {
+      const query = c?.req?.query?.() ?? {};
+      return { ...query };
+    } catch {
+      return {};
+    }
   }
 
   /**
