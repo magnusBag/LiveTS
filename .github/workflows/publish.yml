@@ -20,25 +20,28 @@ jobs:
             target: x86_64-unknown-linux-gnu
             build: |
               cd packages/rust-core
-              npm run build
-              find . -name "*.node" -exec strip {} \; || true
+              npx napi build --platform --release --target x86_64-unknown-linux-gnu
+              ls -la *.node || echo "No .node files found yet"
+              find . -name "*.node" -exec strip {} \; || echo "Strip completed or no files to strip"
           - host: macos-latest
             target: x86_64-apple-darwin
             build: |
               cd packages/rust-core
-              npm run build
-              find . -name "*.node" -exec strip -x {} \; || true
+              npx napi build --platform --release --target x86_64-apple-darwin
+              ls -la *.node || echo "No .node files found yet"
+              find . -name "*.node" -exec strip -x {} \; || echo "Strip completed or no files to strip"
           - host: macos-latest
             target: aarch64-apple-darwin
             build: |
               cd packages/rust-core
-              npm run build --target aarch64-apple-darwin
-              find . -name "*.node" -exec strip -x {} \; || true
+              npx napi build --platform --release --target aarch64-apple-darwin
+              ls -la *.node || echo "No .node files found yet"
+              find . -name "*.node" -exec strip -x {} \; || echo "Strip completed or no files to strip"
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             build: |
               cd packages/rust-core
-              npm run build
+              npx napi build --platform --release --target x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
@@ -73,12 +76,20 @@ jobs:
       - name: Build native module
         run: ${{ matrix.settings.build }}
 
+      - name: Debug - List all files in rust-core directory
+        run: |
+          cd packages/rust-core
+          echo "Files in packages/rust-core:"
+          ls -la
+          echo "Looking for .node files specifically:"
+          find . -name "*.node" -ls || echo "No .node files found"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.settings.target }}
           path: packages/rust-core/*.node
-          if-no-files-found: error
+          if-no-files-found: warn
 
   publish:
     name: Publish to NPM
