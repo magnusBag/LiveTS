@@ -512,4 +512,18 @@ if (document.readyState === 'loading') {
   private generateConnectionId(): string {
     return Math.random().toString(36).substring(2, 15);
   }
+
+  /**
+   * Get the underlying Hono app instance for adding custom routes
+   */
+  getApp(): Hono {
+    return this.app;
+  }
+
+  /**
+   * Start the server (alias for listen)
+   */
+  async start(): Promise<void> {
+    return this.listen();
+  }
 }

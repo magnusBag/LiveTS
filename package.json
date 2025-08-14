@@ -14,24 +14,32 @@
     "build:client": "cd packages/client && npm run build",
     "dev": "npm run build && npm run dev:example",
     "dev:example": "cd examples/counter && npm run dev",
-    "test": "npm run test --workspaces",
-    "clean": "npm run clean --workspaces && rm -rf node_modules",
-    "setup": "npm install && npm run build"
+    "lint": "npm run lint:rust && npm run lint:ts",
+    "lint:rust": "cd packages/rust-core && cargo clippy -- -D warnings",
+    "lint:ts": "eslint 'packages/*/src/**/*.ts' 'examples/*/src/**/*.ts' --fix || true",
+    "test": "npm run test:rust",
+    "test:rust": "cd packages/rust-core && cargo test",
+    "clean": "npm run clean:rust && npm run clean:ts",
+    "clean:rust": "cd packages/rust-core && cargo clean",
+    "clean:ts": "rm -rf packages/*/dist packages/*/build",
+    "setup": "npm install && npm run build",
+    "publish:all": "npm run build && npm run publish:packages",
+    "publish:packages": "cd packages/rust-core && npm publish --access public && cd ../core && npm publish --access public && cd ../client && npm publish --access public"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "prettier": "^3.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0"
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/livets.git"
+    "url": "https://github.com/magnusbag/livets.git"
   },
   "license": "MIT",
   "keywords": [

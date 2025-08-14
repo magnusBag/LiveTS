@@ -1,7 +1,7 @@
 {
   "name": "@livets/rust-core",
   "version": "0.1.0",
-  "description": "Rust core engine for LiveTS",
+  "description": "High-performance Rust core for LiveTS framework - real-time server-rendered web applications",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
@@ -20,6 +20,31 @@
     }
   },
   "license": "MIT",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/magnusbag/livets.git",
+    "directory": "packages/rust-core"
+  },
+  "keywords": [
+    "livets",
+    "real-time",
+    "server-rendered",
+    "websocket",
+    "rust",
+    "napi",
+    "dom-diffing",
+    "performance"
+  ],
+  "author": "Magnus Bag <magnus@example.com>",
+  "homepage": "https://github.com/magnusbag/livets#readme",
+  "bugs": {
+    "url": "https://github.com/magnusbag/livets/issues"
+  },
   "devDependencies": {
     "@napi-rs/cli": "^2.16.0"
   },

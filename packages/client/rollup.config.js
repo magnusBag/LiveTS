@@ -7,17 +7,20 @@ export default {
     {
       file: 'dist/connector.js',
       format: 'iife',
-      name: 'LiveTSConnector'
+      name: 'LiveTS',
+      exports: 'named'
     },
     {
       file: 'dist/connector.min.js',
       format: 'iife',
-      name: 'LiveTSConnector',
+      name: 'LiveTS',
+      exports: 'named',
       plugins: [terser()]
     },
     {
       file: 'dist/connector.esm.js',
-      format: 'es'
+      format: 'es',
+      exports: 'named'
     }
   ],
   plugins: [

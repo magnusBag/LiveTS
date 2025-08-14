@@ -345,5 +345,4 @@ if (document.readyState === 'loading') {
 }
 
 // Export for module usage
-export { LiveTSConnector };
-export default LiveTSConnector;
+export { LiveTSConnector, initializeLiveTS };

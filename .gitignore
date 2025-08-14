@@ -7,38 +7,69 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
-*.tsbuildinfo
+*.node
 
 # Rust
 target/
 Cargo.lock
-*.node
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
+# TypeScript
+*.tsbuildinfo
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment
+# Environment variables
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # Logs
-logs
+logs/
 *.log
 
-# Coverage
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
 coverage/
+*.lcov
+
+# nyc test coverage
 .nyc_output
 
-# Temporary
-.tmp/
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Temporary folders
+tmp/
 temp/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
