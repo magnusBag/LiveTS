@@ -178,26 +178,23 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: actions/create-release@v2
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "LiveTS v${{ steps.get_version.outputs.version }}" \
+            --notes "## LiveTS v${{ steps.get_version.outputs.version }}
+
+          ### What's Changed
+          - Real-time server-rendered web applications with TypeScript and Rust
+          - Intelligent HTML diffing for efficient DOM updates
+          - Generic class change detection for any CSS framework
+          - High-performance WebSocket communication
+
+          ### Installation
+          \`\`\`bash
+          npm install @magnusbag/livets-core @magnusbag/livets-client @magnusbag/livets-rust-core
+          \`\`\`
+
+          See the [documentation](https://github.com/${{ github.repository }}) for usage examples." \
+            --verify-tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: LiveTS v${{ steps.get_version.outputs.version }}
-          body: |
-            ## LiveTS v${{ steps.get_version.outputs.version }}
-
-            ### What's Changed
-            - Real-time server-rendered web applications with TypeScript and Rust
-            - Intelligent HTML diffing for efficient DOM updates
-            - Generic class change detection for any CSS framework
-            - High-performance WebSocket communication
-
-            ### Installation
-            ```bash
-            npm install @magnusbag/livets-core @magnusbag/livets-client @magnusbag/livets-rust-core
-            ```
-
-            See the [documentation](https://github.com/${{ github.repository }}) for usage examples.
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
