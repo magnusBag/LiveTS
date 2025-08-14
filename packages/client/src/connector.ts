@@ -285,10 +285,8 @@ class LiveTSConnector {
 
   private getWebSocketUrl(): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = parseInt(window.location.port) + 1; // WebSocket server runs on HTTP port + 1
-
-    return `${protocol}//${host}:${port}`;
+    const host = window.location.host;
+    return `${protocol}//${host}/livets-ws`;
   }
 
   private attemptReconnect(): void {

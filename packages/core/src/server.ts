@@ -6,7 +6,6 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import WebSocket from 'ws';
 import { readFileSync } from 'fs';
-import { join } from 'path';
 import { LiveView } from './live-view';
 import type { ServerOptions, ComponentProps, RenderOptions } from './types';
 
@@ -94,13 +93,14 @@ export class LiveTSServer {
   async listen(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this.server = serve({
+        const server = serve({
           fetch: this.app.fetch,
           port: this.options.port,
           hostname: this.options.host
         });
 
-        this.setupWebSocketServer();
+        this.server = server;
+        this.setupWebSocketServer(server);
 
         console.log(`LiveTS server listening on http://${this.options.host}:${this.options.port}`);
         resolve();
@@ -185,10 +185,17 @@ export class LiveTSServer {
     });
   }
 
-  private setupWebSocketServer(): void {
-    this.wss = new WebSocket.Server({
-      port: this.options.port + 1,
-      host: this.options.host
+  private setupWebSocketServer(server: any): void {
+    this.wss = new WebSocket.Server({ noServer: true });
+
+    server.on('upgrade', (request: any, socket: any, head: any) => {
+      if (request.url === '/livets-ws') {
+        this.wss!.handleUpgrade(request, socket, head, ws => {
+          this.wss!.emit('connection', ws, request);
+        });
+      } else {
+        socket.destroy();
+      }
     });
 
     this.wss.on('connection', (ws, req) => {
@@ -216,7 +223,7 @@ export class LiveTSServer {
       });
     });
 
-    console.log(`WebSocket server listening on ws://${this.options.host}:${this.options.port + 1}`);
+    console.log(`WebSocket server is running on the same port as the HTTP server.`);
   }
 
   private async handleWebSocketMessage(
@@ -264,10 +271,10 @@ export class LiveTSServer {
       let patches;
       if (this.rustEngine && oldHtml) {
         try {
-          console.log('🦀 Using Rust core for HTML diffing');
+          console.debug('🦀 Using Rust core for HTML diffing');
           const patchBytes = await this.rustEngine.renderComponent(componentId, oldHtml, newHtml);
           patches = JSON.parse(Buffer.from(patchBytes).toString());
-          console.log('🎯 Generated', patches.length, 'patches using Rust');
+          console.debug('🎯 Generated', patches.length, 'patches using Rust');
         } catch (rustError) {
           console.warn('Rust diffing failed, falling back to JavaScript:', rustError);
           patches = this.fallbackDiff(componentId, oldHtml, newHtml);
@@ -346,7 +353,7 @@ export class LiveTSServer {
     <div data-livets-root>
         ${html}
     </div>
-    
+
     <script src="/livets/connector.js"></script>
     ${scriptTags}
 </body>
@@ -400,11 +407,11 @@ class FallbackConnector {
 
     const handler = element.getAttribute('ts-on:' + event.type);
     const componentElement = element.closest('[data-livets-id]');
-    
+
     if (!handler || !componentElement) return;
 
     event.preventDefault();
-    
+
     if (this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: 'event',
