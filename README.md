@@ -4,8 +4,8 @@
 
 LiveTS is a modern framework for building real-time, server-rendered web applications. Inspired by Phoenix LiveView and Blazor Server, it combines the productivity of TypeScript with the performance of Rust.
 
-[![CI](https://github.com/your-username/livets/workflows/CI/badge.svg)](https://github.com/your-username/livets/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@livets/core)](https://www.npmjs.com/package/@livets/core)
+[![CI](https://github.com/magnusbag/livets/workflows/CI/badge.svg)](https://github.com/magnusbag/livets/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@magnusbag/livets-core)](https://img.shields.io/npm/v/@magnusbag/livets-core)
 
 ## Features
 
