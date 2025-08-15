@@ -2,8 +2,6 @@
  * Decorators for LiveTS components
  */
 
-import type { EventHandler } from './types';
-
 /**
  * Decorator for marking methods as event handlers
  */

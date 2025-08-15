@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { readFileSync } from 'fs';
 import { LiveView } from './live-view';
-import type { ServerOptions, ComponentProps, RenderOptions, ComponentRouteConfig } from './types';
+import type { ServerOptions, ComponentProps, RenderOptions } from './types';
 
 // Import the Rust core engine types
 import type { LiveTsEngine, LiveTsWebSocketBroker } from '@magnusbag/livets-rust-core';
