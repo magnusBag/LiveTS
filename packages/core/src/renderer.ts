@@ -14,7 +14,7 @@ export class ComponentRenderer {
     props?: ComponentProps
   ): Promise<string> {
     const component = new ComponentClass(props);
-    
+
     try {
       await component._mount();
       return component._render();
@@ -40,7 +40,7 @@ export class ComponentRenderer {
    */
   static async hydrateComponent<T extends LiveView>(
     component: T,
-    connectionId: string
+    connection_id: string
   ): Promise<void> {
     if (!component.isMounted()) {
       await component._mount();
@@ -48,7 +48,9 @@ export class ComponentRenderer {
 
     // Associate component with connection
     // TODO: Register with Rust core engine
-    console.log(`Hydrating component ${component.getComponentId()} with connection ${connectionId}`);
+    console.log(
+      `Hydrating component ${component.getComponentId()} with connection ${connection_id}`
+    );
   }
 
   /**
@@ -64,13 +66,9 @@ export class ComponentRenderer {
       .map(([key, value]) => `<meta name="${key}" content="${value}">`)
       .join('\n    ');
 
-    const styleTags = styles
-      .map(href => `<link rel="stylesheet" href="${href}">`)
-      .join('\n    ');
+    const styleTags = styles.map(href => `<link rel="stylesheet" href="${href}">`).join('\n    ');
 
-    const scriptTags = scripts
-      .map(src => `<script src="${src}"></script>`)
-      .join('\n    ');
+    const scriptTags = scripts.map(src => `<script src="${src}"></script>`).join('\n    ');
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -85,7 +83,7 @@ export class ComponentRenderer {
     <div data-livets-root>
         ${html}
     </div>
-    
+
     <script src="/livets/connector.js"></script>
     ${scriptTags}
 </body>

@@ -7,11 +7,11 @@ import type {
   LiveViewState,
   EventPayload,
   ComponentProps,
-  ComponentId,
   EventHandler,
   PubSubHandler,
   LiveViewMetadata,
-  PubSubMessage
+  PubSubMessage,
+  ComponentId
 } from './types';
 
 export abstract class LiveView {

@@ -2,12 +2,15 @@
 
 use crate::types::*;
 use dashmap::DashMap;
+use tokio::sync::mpsc::UnboundedSender;
 
 /// Information about a WebSocket connection
 #[derive(Debug, Clone)]
 pub struct Connection {
     pub component_ids: Vec<ComponentId>,
     pub last_ping: std::time::Instant,
+    // Outbound sender to write messages to this connection's websocket task
+    pub sender: Option<UnboundedSender<String>>,
 }
 
 impl Connection {
@@ -15,6 +18,7 @@ impl Connection {
         Self {
             component_ids: Vec::new(),
             last_ping: std::time::Instant::now(),
+            sender: None,
         }
     }
 
@@ -26,6 +30,10 @@ impl Connection {
 
     pub fn remove_component(&mut self, component_id: &ComponentId) {
         self.component_ids.retain(|id| id != component_id);
+    }
+
+    pub fn attach_sender(&mut self, sender: UnboundedSender<String>) {
+        self.sender = Some(sender);
     }
 }
 
@@ -44,14 +52,24 @@ impl ConnectionManager {
     }
 
     /// Adds a new WebSocket connection
-    pub fn add_connection(&mut self, conn_id: ConnectionId) -> Result<()> {
+    pub fn add_connection(&self, conn_id: ConnectionId) -> Result<()> {
         let connection = Connection::new();
         self.connections.insert(conn_id, connection);
         Ok(())
     }
 
+    /// Attaches an outbound sender to an existing connection
+    pub fn attach_sender(&self, conn_id: &ConnectionId, sender: UnboundedSender<String>) -> Result<()> {
+        if let Some(mut conn) = self.connections.get_mut(conn_id) {
+            conn.attach_sender(sender);
+            Ok(())
+        } else {
+            Err(LiveTSError::ConnectionNotFound(conn_id.clone()))
+        }
+    }
+
     /// Removes a WebSocket connection and cleans up component associations
-    pub fn remove_connection(&mut self, conn_id: &ConnectionId) -> Result<()> {
+    pub fn remove_connection(&self, conn_id: &ConnectionId) -> Result<()> {
         if let Some((_, connection)) = self.connections.remove(conn_id) {
             // Clean up component associations
             for component_id in &connection.component_ids {
@@ -69,7 +87,7 @@ impl ConnectionManager {
 
     /// Associates a component with a connection
     pub fn register_component(
-        &mut self,
+        &self,
         component_id: ComponentId,
         conn_id: ConnectionId,
     ) -> Result<()> {
@@ -91,7 +109,7 @@ impl ConnectionManager {
 
     /// Removes a component association from a connection
     pub fn unregister_component(
-        &mut self,
+        &self,
         component_id: &ComponentId,
         conn_id: &ConnectionId,
     ) -> Result<()> {
@@ -116,7 +134,7 @@ impl ConnectionManager {
     pub async fn broadcast_to_component(
         &self,
         component_id: &ComponentId,
-        data: &[u8],
+        data: &str,
     ) -> Result<()> {
         if let Some(connections) = self.component_to_connections.get(component_id) {
             for conn_id in connections.iter() {
@@ -132,16 +150,20 @@ impl ConnectionManager {
     pub async fn send_to_connection(
         &self,
         conn_id: &ConnectionId,
-        data: &[u8],
+        data: &str,
     ) -> Result<()> {
-        // In a real implementation, this would send data through the WebSocket
-        // For now, we'll just log it
-        tracing::debug!("Sending {} bytes to connection {}", data.len(), conn_id);
-        
-        // TODO: Implement actual WebSocket sending
-        // This will require storing the actual WebSocket handles
-        
-        Ok(())
+        if let Some(conn) = self.connections.get(conn_id) {
+            if let Some(sender) = &conn.sender {
+                sender
+                    .send(data.to_string())
+                    .map_err(|e| LiveTSError::WebSocketError(format!("Send failed: {}", e)))?;
+                Ok(())
+            } else {
+                Err(LiveTSError::WebSocketError("No sender attached to connection".into()))
+            }
+        } else {
+            Err(LiveTSError::ConnectionNotFound(conn_id.clone()))
+        }
     }
 
     /// Gets all connections for a component

@@ -168,8 +168,8 @@ export abstract class LiveView {
 **Server Setup**
 
 ```typescript
-import { Hono } from "hono";
-import { LiveTSEngine } from "./native/livets-core.node";
+import { Hono } from 'hono';
+import { LiveTSEngine } from './native/livets-core.node';
 
 export class LiveTSServer {
   private app: Hono;
@@ -181,10 +181,7 @@ export class LiveTSServer {
     this.setupRoutes();
   }
 
-  registerComponent<T extends LiveView>(
-    path: string,
-    ComponentClass: new () => T
-  ): void;
+  registerComponent<T extends LiveView>(path: string, ComponentClass: new () => T): void;
 
   listen(port: number): void;
 }
@@ -201,7 +198,7 @@ export class ComponentRenderer {
 
   static async hydrateComponent<T extends LiveView>(
     component: T,
-    connectionId: string
+    connection_id: string
   ): Promise<void>;
 }
 ```
@@ -220,23 +217,23 @@ class LiveTSConnector {
 
   setupEventListeners() {
     // Handle incoming patches from server
-    this.ws.onmessage = (event) => {
+    this.ws.onmessage = event => {
       const patches = JSON.parse(event.data);
       this.applyPatches(patches);
     };
 
     // Delegate DOM events to server
-    document.addEventListener("click", this.handleDomEvent.bind(this));
-    document.addEventListener("input", this.handleDomEvent.bind(this));
-    document.addEventListener("submit", this.handleDomEvent.bind(this));
+    document.addEventListener('click', this.handleDomEvent.bind(this));
+    document.addEventListener('input', this.handleDomEvent.bind(this));
+    document.addEventListener('submit', this.handleDomEvent.bind(this));
   }
 
   handleDomEvent(event) {
-    const element = event.target.closest("[ts-on\\:" + event.type + "]");
+    const element = event.target.closest('[ts-on\\:' + event.type + ']');
     if (!element) return;
 
     const handler = element.getAttribute(`ts-on:${event.type}`);
-    const componentId = element.closest("[data-livets-id]")?.dataset.livetsId;
+    const componentId = element.closest('[data-livets-id]')?.dataset.livetsId;
 
     if (handler && componentId) {
       event.preventDefault();
@@ -245,15 +242,13 @@ class LiveTSConnector {
   }
 
   applyPatches(patches) {
-    patches.forEach((patch) => {
+    patches.forEach(patch => {
       switch (patch.type) {
-        case "ReplaceText":
+        case 'ReplaceText':
           document.querySelector(patch.selector).textContent = patch.content;
           break;
-        case "SetAttribute":
-          document
-            .querySelector(patch.selector)
-            .setAttribute(patch.attr, patch.value);
+        case 'SetAttribute':
+          document.querySelector(patch.selector).setAttribute(patch.attr, patch.value);
           break;
         // ... other patch types
       }
@@ -263,10 +258,10 @@ class LiveTSConnector {
   sendEvent(componentId, eventName, eventData) {
     this.ws.send(
       JSON.stringify({
-        type: "event",
+        type: 'event',
         componentId,
         eventName,
-        eventData,
+        eventData
       })
     );
   }

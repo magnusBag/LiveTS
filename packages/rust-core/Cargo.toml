@@ -16,6 +16,7 @@ napi-derive = "2.13.0"
 # WebSocket handling
 tungstenite = { version = "0.20", features = ["native-tls"] }
 tokio-tungstenite = "0.20"
+futures-util = "0.3"
 
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }

@@ -1,4 +1,4 @@
-//! High-performance pub/sub messaging system
+//! High-performance pub/sub messaging system for real-time communication between components
 
 use crate::types::*;
 use dashmap::DashMap;
@@ -7,9 +7,7 @@ use tokio::sync::broadcast;
 
 /// Pub/Sub system for real-time messaging between components
 pub struct PubSubSystem {
-    // Channel subscribers: channel_id -> set of component_ids
     subscribers: DashMap<ChannelId, HashSet<ComponentId>>,
-    // Component subscriptions: component_id -> set of channel_ids (for cleanup)
     component_channels: DashMap<ComponentId, HashSet<ChannelId>>,
     // Broadcast channels for real-time messaging
     channels: DashMap<ChannelId, broadcast::Sender<String>>,
@@ -53,7 +51,7 @@ impl PubSubSystem {
         // Remove component from channel subscribers
         if let Some(mut subscribers) = self.subscribers.get_mut(channel) {
             subscribers.remove(component_id);
-            
+
             // If no more subscribers, clean up the channel
             if subscribers.is_empty() {
                 drop(subscribers);
@@ -65,7 +63,7 @@ impl PubSubSystem {
         // Remove channel from component's subscriptions
         if let Some(mut channels) = self.component_channels.get_mut(component_id) {
             channels.remove(channel);
-            
+
             // If component has no more subscriptions, clean up
             if channels.is_empty() {
                 drop(channels);
@@ -83,7 +81,7 @@ impl PubSubSystem {
             for channel in channels {
                 if let Some(mut subscribers) = self.subscribers.get_mut(&channel) {
                     subscribers.remove(component_id);
-                    
+
                     // Clean up empty channels
                     if subscribers.is_empty() {
                         drop(subscribers);
@@ -212,7 +210,7 @@ mod tests {
         // Subscribe then unsubscribe
         pubsub.subscribe(&channel, &component).await.unwrap();
         pubsub.unsubscribe(&channel, &component).await.unwrap();
-        
+
         assert!(!pubsub.is_subscribed(&channel, &component));
         assert!(!pubsub.channel_exists(&channel));
     }
