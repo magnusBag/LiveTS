@@ -93,11 +93,36 @@ impl HtmlDiffer {
             }
         }
 
-        if patches.is_empty() { None } else { Some(patches) }
+        if patches.is_empty() { None } else { 
+            // Convert to compact format
+            let compact_patches: Vec<DomPatch> = patches.into_iter().map(|patch| {
+                self.optimize_patch(patch)
+            }).collect();
+            Some(compact_patches) 
+        }
     }
 
     /// Find the best matching element based on tag name and context
     fn find_matching_element<'a>(&self, target: &HtmlElement, candidates: &'a [HtmlElement]) -> Option<&'a HtmlElement> {
+        // Priority 1: Exact ts_selector match (most reliable)
+        if !target.ts_selector.is_empty() {
+            for candidate in candidates {
+                if candidate.ts_selector == target.ts_selector {
+                    return Some(candidate);
+                }
+            }
+        }
+        
+        // Priority 2: Exact ID match (very reliable)
+        if !target.id.is_empty() {
+            for candidate in candidates {
+                if candidate.id == target.id {
+                    return Some(candidate);
+                }
+            }
+        }
+        
+        // Priority 3: Score-based matching for elements without unique identifiers
         let mut best_match = None;
         let mut best_score = 0;
         
@@ -171,11 +196,18 @@ impl HtmlDiffer {
                     .map(|m| m.get(1).unwrap().as_str().to_string())
                     .unwrap_or_default();
                 
+                // Extract data-ts-selector attribute
+                let ts_selector_regex = regex::Regex::new(r#"data-ts-sel="([^"]*)""#).unwrap();
+                let ts_selector = ts_selector_regex.captures(attributes)
+                    .map(|m| m.get(1).unwrap().as_str().to_string())
+                    .unwrap_or_default();
+                
                 elements.push(HtmlElement {
                     tag_name: open_tag,
                     classes,
                     text_content,
                     id,
+                    ts_selector,
                 });
             }
         }
@@ -191,44 +223,135 @@ impl HtmlDiffer {
     }
 
     /// Build a specific CSS selector for an element
-    fn build_element_selector(&self, base_selector: &str, element: &HtmlElement) -> String {
-        // Strategy 1: Use ID if available (most stable and specific)
+    fn build_element_selector(&self, _base_selector: &str, element: &HtmlElement) -> String {
+        // Strategy 1: Use data-ts-selector if available (most precise and framework-native)
+        if !element.ts_selector.is_empty() {
+            // Return compact selector format for WebSocket transmission
+            return element.ts_selector.clone();
+        }
+        
+        // Strategy 2: Use ID if available (most stable and specific)
         if !element.id.is_empty() {
             return format!("#{}", element.id);
         }
         
-        // Strategy 2: Use distinguishing classes for elements without IDs
+        // Strategy 3: Use distinguishing classes for elements without framework selectors
         if !element.classes.is_empty() {
             let classes: Vec<&str> = element.classes.split_whitespace().collect();
             
             // Look for a unique distinguishing class (like bg-red-500, bg-blue-500)
             for class in &classes {
                 if class.starts_with("bg-") || class.starts_with("text-") || class.contains("primary") || class.contains("secondary") {
-                    return format!("{} .{}", base_selector, class);
+                    return format!(".{}", class);
                 }
             }
             
             // Use multiple classes to create a more specific selector
             if classes.len() >= 2 {
-                return format!("{} .{}.{}", base_selector, classes[0], classes[1]);
+                return format!(".{}.{}", classes[0], classes[1]);
             }
             
             // Single class fallback
             if let Some(first_class) = classes.first() {
-                return format!("{} .{}", base_selector, first_class);
+                return format!(".{}", first_class);
             }
         }
         
-        // Strategy 3: Use text content as additional specificity for short text
+        // Strategy 4: Use text content as additional specificity for short text
         if !element.text_content.is_empty() && element.text_content.len() <= 10 {
             return format!("{}:contains('{}')", 
-                format!("{} {}", base_selector, element.tag_name),
+                element.tag_name,
                 element.text_content.replace("'", "\\'")
             );
         }
         
-        // Fallback to tag name
-        format!("{} {}", base_selector, element.tag_name)
+        // Fallback to tag name (least specific)
+        element.tag_name.clone()
+    }
+
+    /// Optimize patch by using compact selector format
+    fn optimize_patch(&self, patch: DomPatch) -> DomPatch {
+        match patch {
+            DomPatch::UpdateText { selector, text } => {
+                DomPatch::UpdateText {
+                    selector: self.optimize_selector(selector),
+                    text,
+                }
+            }
+            DomPatch::SetAttribute { selector, attr, value } => {
+                DomPatch::SetAttribute {
+                    selector: self.optimize_selector(selector),
+                    attr,
+                    value,
+                }
+            }
+            DomPatch::RemoveAttribute { selector, attr } => {
+                DomPatch::RemoveAttribute {
+                    selector: self.optimize_selector(selector),
+                    attr,
+                }
+            }
+            DomPatch::ReplaceInnerHtml { selector, html } => {
+                DomPatch::ReplaceInnerHtml {
+                    selector: self.optimize_selector(selector),
+                    html,
+                }
+            }
+            DomPatch::ReplaceElement { selector, html } => {
+                DomPatch::ReplaceElement {
+                    selector: self.optimize_selector(selector),
+                    html,
+                }
+            }
+            _ => patch, // Keep other patches as-is
+        }
+    }
+
+    /// Converts a DomPatch directly to ultra-compact string format
+    /// Format: "op|selector|data"
+    /// Operations: t=UpdateText, a=SetAttribute, r=RemoveAttribute, h=ReplaceInnerHtml, e=ReplaceElement
+    fn patch_to_compact(&self, patch: DomPatch) -> String {
+        match patch {
+            DomPatch::UpdateText { selector, text } => {
+                let compact_selector = self.optimize_selector(selector);
+                format!("t|{}|{}", compact_selector, text)
+            }
+            DomPatch::SetAttribute { selector, attr, value } => {
+                let compact_selector = self.optimize_selector(selector);
+                format!("a|{}|{}|{}", compact_selector, attr, value)
+            }
+            DomPatch::RemoveAttribute { selector, attr } => {
+                let compact_selector = self.optimize_selector(selector);
+                format!("r|{}|{}", compact_selector, attr)
+            }
+            DomPatch::ReplaceInnerHtml { selector, html } => {
+                let compact_selector = self.optimize_selector(selector);
+                format!("h|{}|{}", compact_selector, html)
+            }
+            DomPatch::ReplaceElement { selector, html } => {
+                let compact_selector = self.optimize_selector(selector);
+                format!("e|{}|{}", compact_selector, html)
+            }
+            _ => String::new(), // Fallback for unknown patch types
+        }
+    }
+
+    /// Converts a vector of DomPatches to compact string format
+    pub fn patches_to_compact(&self, patches: Vec<DomPatch>) -> Vec<String> {
+        patches.into_iter()
+            .map(|patch| self.patch_to_compact(patch))
+            .collect()
+    }
+
+    /// Convert full CSS selector to compact format for WebSocket transmission
+    fn optimize_selector(&self, selector: String) -> String {
+        // If it's already a data-ts-selector, extract just the value
+        if selector.starts_with("[data-ts-sel=\"") && selector.ends_with("\"]") {
+            // Extract: [data-ts-sel="abc123.0"] -> abc123.0
+            return selector[19..selector.len()-2].to_string();
+        }
+        // Return as-is for other selectors
+        selector
     }
 }
 
@@ -239,6 +362,7 @@ struct HtmlElement {
     classes: String,
     text_content: String,
     id: String,
+    ts_selector: String,
 }
 
 impl Default for HtmlDiffer {

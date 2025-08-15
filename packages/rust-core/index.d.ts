@@ -10,6 +10,13 @@ export declare class LiveTsEngine {
   constructor()
   /** Renders a component and returns the diff patches */
   renderComponent(componentId: string, oldHtml: string, newHtml: string): string
+  /** Renders a component and returns compact string patches for ultra-efficient WebSocket transmission */
+  renderComponentCompact(componentId: string, oldHtml: string, newHtml: string): string
+  /**
+   * Renders a component and returns complete ultra-compact WebSocket message
+   * This eliminates ALL JSON operations in TypeScript layer
+   */
+  renderComponentMessage(componentId: string, oldHtml: string, newHtml: string): string
 }
 export type LiveTSWebSocketBroker = LiveTsWebSocketBroker
 /** Tokio-based WebSocket broker running inside the Rust core */

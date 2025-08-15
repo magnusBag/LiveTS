@@ -7,25 +7,37 @@ export default {
     {
       file: 'dist/connector.js',
       format: 'iife',
-      name: 'LiveTS',
-      exports: 'named'
+      name: 'LiveTS'
     },
     {
       file: 'dist/connector.min.js',
       format: 'iife',
       name: 'LiveTS',
-      exports: 'named',
-      plugins: [terser()]
+      plugins: [terser({
+        compress: {
+          passes: 2,
+          drop_console: false,
+          drop_debugger: true,
+          pure_funcs: ['console.log'],
+          unsafe_arrows: true,
+          unsafe_methods: true
+        },
+        mangle: {
+          properties: {
+            regex: /^_/
+          }
+        }
+      })]
     },
     {
       file: 'dist/connector.esm.js',
-      format: 'es',
-      exports: 'named'
+      format: 'es'
     }
   ],
   plugins: [
     typescript({
-      tsconfig: './tsconfig.json'
+      tsconfig: './tsconfig.json',
+      sourceMap: false
     })
   ]
 };
