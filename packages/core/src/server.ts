@@ -4,14 +4,16 @@
 
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import WebSocket from 'ws';
 import { readFileSync } from 'fs';
 import { LiveView } from './live-view';
 import type { ServerOptions, ComponentProps, RenderOptions } from './types';
 
+// Import the Rust core engine types
+import type { LiveTsEngine, LiveTsWebSocketBroker } from '@magnusbag/livets-rust-core';
+
 // Import the Rust core engine
-let LiveTSEngine: any;
-let LiveTSWebSocketBroker: any;
+let LiveTSEngine: typeof LiveTsEngine | null;
+let LiveTSWebSocketBroker: typeof LiveTsWebSocketBroker | null;
 try {
   const rustCore = require('@magnusbag/livets-rust-core');
   LiveTSEngine = rustCore.LiveTsEngine; // Note: lowercase 's' in generated binding
@@ -25,14 +27,13 @@ try {
 export class LiveTSServer {
   private app: Hono;
   private server?: any;
-  private wss?: WebSocket.Server;
   private components: Map<string, new (props?: ComponentProps) => LiveView> = new Map();
   private activeComponents: Map<string, LiveView> = new Map();
   private componentHtmlCache: Map<string, string> = new Map(); // Cache for HTML diffing
   private options: Required<ServerOptions>;
-  private rustEngine?: any;
+  private rustEngine?: LiveTsEngine;
   // Rust WS broker and mapping of connection->components
-  private rustBroker?: any;
+  private rustBroker?: LiveTsWebSocketBroker;
   private brokerConnComponents: Map<string, Set<string>> = new Map();
 
   constructor(options: ServerOptions = {}) {
@@ -135,10 +136,6 @@ export class LiveTSServer {
    * Stops the server
    */
   async close(): Promise<void> {
-    if (this.wss) {
-      this.wss.close();
-    }
-
     if (this.server) {
       this.server.close();
     }
@@ -164,7 +161,7 @@ export class LiveTSServer {
     return {
       activeComponents: this.activeComponents.size,
       registeredRoutes: this.components.size,
-      wsConnections: this.wss?.clients.size ?? 0
+      wsConnections: 0 // TODO: Add connection count method to Rust broker
     };
   }
 
@@ -213,60 +210,15 @@ export class LiveTSServer {
 
   private setupWebSocketServer(server: any): void {
     // If Rust broker is available, start it on a dedicated WebSocket port
-    if (this.rustBroker) {
-      try {
-        // Use dedicated WebSocket port for optimal performance
-        const wsPort = this.options.port + 1;
-        this.rustBroker.listen(this.options.host, wsPort);
-        console.log(
-          `🦀 Rust WebSocket broker listening on ws://${this.options.host}:${wsPort}/livets-ws`
-        );
-        return;
-      } catch (error) {
-        console.error('❌ Failed to start Rust broker:', error);
-        console.log('📝 Falling back to Node.js WebSocket server');
-        this.rustBroker = undefined;
-        // Fall through to start Node.js WebSocket server
-      }
+    if (!this.rustBroker) {
+      throw new Error('Rust broker is not available');
     }
-
-    this.wss = new WebSocket.Server({ noServer: true });
-
-    server.on('upgrade', (request: any, socket: any, head: any) => {
-      if (request.url === '/livets-ws') {
-        this.wss!.handleUpgrade(request, socket, head, ws => {
-          this.wss!.emit('connection', ws, request);
-        });
-      } else {
-        socket.destroy();
-      }
-    });
-
-    this.wss.on('connection', (ws, req) => {
-      const connection_id = this.generateConnectionId();
-
-      console.log(`WebSocket connection established: ${connection_id}`);
-
-      ws.on('message', async data => {
-        try {
-          const message = JSON.parse(data.toString());
-          await this.handleWebSocketMessage(connection_id, message, ws);
-        } catch (error) {
-          console.error('Error handling WebSocket message:', error);
-          ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
-        }
-      });
-
-      ws.on('close', () => {
-        console.log(`WebSocket connection closed: ${connection_id}`);
-      });
-
-      ws.on('error', error => {
-        console.error(`WebSocket error for ${connection_id}:`, error);
-      });
-    });
-
-    console.log(`WebSocket server is running on the same port as the HTTP server.`);
+    // Use dedicated WebSocket port for optimal performance
+    const wsPort = this.options.port + 1;
+    this.rustBroker.listen(this.options.host, wsPort);
+    console.log(
+      `🦀 Rust WebSocket broker listening on ws://${this.options.host}:${wsPort}/livets-ws`
+    );
   }
 
   private async handleBrokerEvent(evtJson: string): Promise<void> {
@@ -344,7 +296,7 @@ export class LiveTSServer {
     }
     if (!set.has(componentId)) {
       try {
-        this.rustBroker.registerComponent(componentId, connection_id);
+        this.rustBroker?.registerComponent(componentId, connection_id);
       } catch {}
       set.add(componentId);
     }
@@ -355,39 +307,9 @@ export class LiveTSServer {
 
     const msg = JSON.stringify({ type: 'patches', componentId, patches });
     try {
-      this.rustBroker.sendToConnection(connection_id, msg);
+      this.rustBroker?.sendToConnection(connection_id, msg);
     } catch (e) {
       console.error('Failed sending patches via broker:', e);
-    }
-  }
-
-  private async handleWebSocketMessage(
-    connection_id: string,
-    message: any,
-    ws: WebSocket
-  ): Promise<void> {
-    switch (message.type) {
-      case 'event': {
-        const patches = await this.processEventAndDiff(
-          message.componentId,
-          message.eventName,
-          message.payload
-        );
-        if (!patches) return;
-        ws.send(
-          JSON.stringify({
-            type: 'patches',
-            componentId: message.componentId,
-            patches
-          })
-        );
-        break;
-      }
-      case 'ping':
-        ws.send(JSON.stringify({ type: 'pong' }));
-        break;
-      default:
-        console.warn(`Unknown message type: ${message.type}`);
     }
   }
 
@@ -444,6 +366,7 @@ export class LiveTSServer {
     }
 
     // Fallback: replace the entire component inner HTML
+    console.log('Falling back to full replace for component:', componentId);
     return [
       {
         type: 'ReplaceInnerHtml',
