@@ -3,10 +3,11 @@
  */
 
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { serve } from '@hono/node-server';
 import { readFileSync } from 'fs';
 import { LiveView } from './live-view';
-import type { ServerOptions, ComponentProps, RenderOptions } from './types';
+import type { ServerOptions, ComponentProps, RenderOptions, ComponentRouteConfig } from './types';
 
 // Import the Rust core engine types
 import type { LiveTsEngine, LiveTsWebSocketBroker } from '@magnusbag/livets-rust-core';
@@ -74,9 +75,74 @@ export class LiveTSServer {
   }
 
   /**
-   * Registers a LiveView component with a route
+   * Registers a LiveView component with a simple path-based route
    */
   registerComponent<T extends LiveView>(
+    path: string,
+    ComponentClass: new (props?: ComponentProps) => T,
+    options?: RenderOptions
+  ): void {
+    this.registerSimpleComponent(path, ComponentClass, options);
+  }
+
+  /**
+   * Registers a LiveView component with advanced Hono routing capabilities
+   * This allows you to add middleware, handle multiple HTTP methods, etc.
+   */
+  registerAdvancedComponent<T extends LiveView>(
+    routeBuilder: (
+      app: Hono,
+      componentHandler: (config: ComponentRouteConfig<T>) => (c: Context) => Promise<Response>
+    ) => void
+  ): void {
+    const componentHandler = this.createComponentHandler<T>();
+    routeBuilder(this.app, componentHandler);
+  }
+
+  /**
+   * Creates a reusable component handler for advanced route registration
+   */
+  private createComponentHandler<T extends LiveView>() {
+    return (config: ComponentRouteConfig<T>) => {
+      return async (c: Context): Promise<Response> => {
+        try {
+          const { ComponentClass, renderOptions } = config;
+          const props = this.extractPropsFromContext(c);
+          const component = new ComponentClass(props);
+
+          // Register the component class for this route if not already registered
+          const routePath = c.req.path;
+          if (!this.components.has(routePath)) {
+            this.components.set(routePath, ComponentClass);
+          }
+
+          // Mount the component
+          await component._mount();
+
+          // Store active component
+          this.activeComponents.set(component.getComponentId(), component);
+
+          // Render the component
+          const html = component._render();
+
+          // Cache the initial HTML for diffing
+          this.componentHtmlCache.set(component.getComponentId(), html);
+
+          const fullHtml = this.wrapInLayout(html, renderOptions);
+
+          return c.html(fullHtml);
+        } catch (error) {
+          console.error(`Error rendering component for ${c.req.path}:`, error);
+          return c.text('Internal Server Error', 500 as any);
+        }
+      };
+    };
+  }
+
+  /**
+   * Simple component registration (maintains backward compatibility)
+   */
+  private registerSimpleComponent<T extends LiveView>(
     path: string,
     ComponentClass: new (props?: ComponentProps) => T,
     options?: RenderOptions

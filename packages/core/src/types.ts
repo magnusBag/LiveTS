@@ -55,6 +55,11 @@ export interface RenderOptions {
   styles?: string[];
 }
 
+export interface ComponentRouteConfig<T = any> {
+  ComponentClass: new (props?: ComponentProps) => T;
+  renderOptions?: RenderOptions;
+}
+
 export interface PubSubMessage {
   channel: string;
   data: any;

@@ -11,3 +11,10 @@ export { ComponentRenderer } from './renderer';
 export * from './types';
 export * from './decorators';
 export * from './utils';
+
+// Export the Hono plugin with addLiveTS method
+export { addLiveTS, component, createLiveTSApp } from './hono-plugin';
+export type { LiveTSOptions, LiveTSState } from './hono-plugin';
+
+// Make sure Hono module declarations are available
+import './hono-plugin';

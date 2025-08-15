@@ -6,6 +6,8 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "dev:adv": "tsx src/advanced-example.ts",
+    "dev:hono": "tsx src/hono-example.ts",
     "build": "tsc",
     "clean": "rm -rf dist"
   },

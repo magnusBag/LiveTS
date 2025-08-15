@@ -36,6 +36,8 @@ class LiveTSConnector {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private domEventHandlers: Map<string, (event: Event) => void> = new Map();
+  private isEventListenersSetup = false;
 
   constructor(wsUrl?: string) {
     const url = wsUrl || this.getWebSocketUrl();
@@ -68,11 +70,30 @@ class LiveTSConnector {
       console.error('LiveTS WebSocket error:', error);
     };
 
+    // Only set up DOM event listeners once to prevent duplicates
+    if (!this.isEventListenersSetup) {
+      this.setupDomEventListeners();
+      this.isEventListenersSetup = true;
+    }
+  }
+
+  private setupDomEventListeners(): void {
+    // Create bound event handlers and store them for potential cleanup
+    const clickHandler = this.handleDomEvent.bind(this);
+    const inputHandler = this.handleDomEvent.bind(this);
+    const submitHandler = this.handleDomEvent.bind(this);
+    const changeHandler = this.handleDomEvent.bind(this);
+
+    this.domEventHandlers.set('click', clickHandler);
+    this.domEventHandlers.set('input', inputHandler);
+    this.domEventHandlers.set('submit', submitHandler);
+    this.domEventHandlers.set('change', changeHandler);
+
     // Delegate DOM events to server
-    document.addEventListener('click', this.handleDomEvent.bind(this));
-    document.addEventListener('input', this.handleDomEvent.bind(this));
-    document.addEventListener('submit', this.handleDomEvent.bind(this));
-    document.addEventListener('change', this.handleDomEvent.bind(this));
+    document.addEventListener('click', clickHandler);
+    document.addEventListener('input', inputHandler);
+    document.addEventListener('submit', submitHandler);
+    document.addEventListener('change', changeHandler);
   }
 
   private setupDomObserver(): void {
@@ -165,14 +186,17 @@ class LiveTSConnector {
 
   private sendEvent(componentId: string, eventName: string, payload: EventData): void {
     if (this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          type: 'event',
-          componentId,
-          eventName,
-          payload
-        })
-      );
+      const eventData = {
+        type: 'event',
+        componentId,
+        eventName,
+        payload
+      };
+
+      // Debug logging to help identify duplicate events
+      console.debug(`[LiveTS] Sending event: ${eventName} for component: ${componentId}`);
+
+      this.ws.send(JSON.stringify(eventData));
     } else {
       console.warn('WebSocket not ready, cannot send event');
     }
@@ -294,6 +318,15 @@ class LiveTSConnector {
     return `${protocol}//${host}/livets-ws`;
   }
 
+  private cleanupDomEventListeners(): void {
+    // Remove existing DOM event listeners
+    for (const [eventType, handler] of this.domEventHandlers) {
+      document.removeEventListener(eventType, handler);
+    }
+    this.domEventHandlers.clear();
+    this.isEventListenersSetup = false;
+  }
+
   private attemptReconnect(): void {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
@@ -319,6 +352,7 @@ class LiveTSConnector {
   // Public API for manual operations
   public disconnect(): void {
     this.ws.close();
+    this.cleanupDomEventListeners();
   }
 
   public getConnectionState(): number {
