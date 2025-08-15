@@ -46,15 +46,26 @@ export class LiveTSServer {
     // Initialize Rust engine/broker if available
     if (LiveTSEngine) {
       this.rustEngine = new LiveTSEngine();
-      console.log('🦀 Rust core engine initialized');
     } else {
       console.log('📝 Using JavaScript fallback for DOM manipulation');
     }
 
-    // Temporarily disable Rust broker due to NAPI threadsafe function bug
-    // and fall back to Node.js WebSocket server
-    console.log('⚠️  Temporarily using Node.js WebSocket server instead of Rust broker');
-    this.rustBroker = undefined;
+    // Initialize Rust broker if available
+    if (LiveTSWebSocketBroker) {
+      try {
+        this.rustBroker = new LiveTSWebSocketBroker();
+        this.rustBroker.setEventHandler((...args: any[]) => {
+          // Handle broker events from Rust
+          const evtJson = args[1];
+          this.handleBrokerEvent(evtJson);
+        });
+      } catch (error) {
+        console.error('Failed to initialize Rust broker:', error);
+        this.rustBroker = undefined;
+      }
+    } else {
+      console.log('📝 Rust broker not available, will use Node.js WebSocket fallback');
+    }
 
     this.app = new Hono();
     this.setupMiddleware();
@@ -113,7 +124,6 @@ export class LiveTSServer {
         this.server = server;
         this.setupWebSocketServer(server);
 
-        console.log(`LiveTS server listening on http://${this.options.host}:${this.options.port}`);
         resolve();
       } catch (error) {
         reject(error);
@@ -180,7 +190,6 @@ export class LiveTSServer {
     // Static file serving - simplified for now
     if (this.options.static) {
       // TODO: Implement static file serving
-      console.log('Static files configured for:', this.options.static.root);
     }
   }
 
@@ -203,10 +212,22 @@ export class LiveTSServer {
   }
 
   private setupWebSocketServer(server: any): void {
-    // If Rust broker is available, do not start Node ws server
+    // If Rust broker is available, start it on a dedicated WebSocket port
     if (this.rustBroker) {
-      console.log('Using Rust WS broker; skipping Node ws server.');
-      return;
+      try {
+        // Use dedicated WebSocket port for optimal performance
+        const wsPort = this.options.port + 1;
+        this.rustBroker.listen(this.options.host, wsPort);
+        console.log(
+          `🦀 Rust WebSocket broker listening on ws://${this.options.host}:${wsPort}/livets-ws`
+        );
+        return;
+      } catch (error) {
+        console.error('❌ Failed to start Rust broker:', error);
+        console.log('📝 Falling back to Node.js WebSocket server');
+        this.rustBroker = undefined;
+        // Fall through to start Node.js WebSocket server
+      }
     }
 
     this.wss = new WebSocket.Server({ noServer: true });
@@ -222,14 +243,14 @@ export class LiveTSServer {
     });
 
     this.wss.on('connection', (ws, req) => {
-      const connectionId = this.generateConnectionId();
+      const connection_id = this.generateConnectionId();
 
-      console.log(`WebSocket connection established: ${connectionId}`);
+      console.log(`WebSocket connection established: ${connection_id}`);
 
       ws.on('message', async data => {
         try {
           const message = JSON.parse(data.toString());
-          await this.handleWebSocketMessage(connectionId, message, ws);
+          await this.handleWebSocketMessage(connection_id, message, ws);
         } catch (error) {
           console.error('Error handling WebSocket message:', error);
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));
@@ -237,11 +258,11 @@ export class LiveTSServer {
       });
 
       ws.on('close', () => {
-        console.log(`WebSocket connection closed: ${connectionId}`);
+        console.log(`WebSocket connection closed: ${connection_id}`);
       });
 
       ws.on('error', error => {
-        console.error(`WebSocket error for ${connectionId}:`, error);
+        console.error(`WebSocket error for ${connection_id}:`, error);
       });
     });
 
@@ -250,8 +271,6 @@ export class LiveTSServer {
 
   private async handleBrokerEvent(evtJson: string): Promise<void> {
     try {
-      console.log('📨 Received broker event:', evtJson);
-
       // Handle empty or null JSON strings
       if (!evtJson || evtJson.trim() === '' || evtJson === 'null') {
         console.warn('⚠️  Received empty or null event JSON:', evtJson);
@@ -271,29 +290,28 @@ export class LiveTSServer {
         return;
       }
 
-      console.log('✅ Processing broker event type:', evt.type);
       switch (evt.type) {
         case 'Connected':
           // Optionally handle new connections
           break;
         case 'Message': {
-          const { connectionId, data } = evt;
+          const { connection_id, data } = evt;
           const message = JSON.parse(data);
-          await this.handleBrokerMessage(connectionId, message);
+          await this.handleBrokerMessage(connection_id, message);
           break;
         }
         case 'Closed': {
           // Cleanup component registrations for this connection
-          const connectionId = evt.connectionId as string;
-          const set = this.brokerConnComponents.get(connectionId);
+          const connection_id = evt.connection_id as string;
+          const set = this.brokerConnComponents.get(connection_id);
           if (set && this.rustBroker) {
             for (const componentId of set) {
               try {
-                this.rustBroker.unregisterComponent(componentId, connectionId);
+                this.rustBroker.unregisterComponent(componentId, connection_id);
               } catch {}
             }
           }
-          this.brokerConnComponents.delete(connectionId);
+          this.brokerConnComponents.delete(connection_id);
           break;
         }
       }
@@ -302,10 +320,10 @@ export class LiveTSServer {
     }
   }
 
-  private async handleBrokerMessage(connectionId: string, message: any): Promise<void> {
+  private async handleBrokerMessage(connection_id: string, message: any): Promise<void> {
     switch (message.type) {
       case 'event':
-        await this.handleClientEventFromBroker(connectionId, message);
+        await this.handleClientEventFromBroker(connection_id, message);
         break;
       case 'ping':
         // The broker responds to ping internally; no-op here
@@ -315,18 +333,18 @@ export class LiveTSServer {
     }
   }
 
-  private async handleClientEventFromBroker(connectionId: string, message: any): Promise<void> {
+  private async handleClientEventFromBroker(connection_id: string, message: any): Promise<void> {
     const { componentId, eventName, payload } = message;
 
     // track registration to avoid duplicates
-    let set = this.brokerConnComponents.get(connectionId);
+    let set = this.brokerConnComponents.get(connection_id);
     if (!set) {
       set = new Set();
-      this.brokerConnComponents.set(connectionId, set);
+      this.brokerConnComponents.set(connection_id, set);
     }
     if (!set.has(componentId)) {
       try {
-        this.rustBroker.registerComponent(componentId, connectionId);
+        this.rustBroker.registerComponent(componentId, connection_id);
       } catch {}
       set.add(componentId);
     }
@@ -337,14 +355,14 @@ export class LiveTSServer {
 
     const msg = JSON.stringify({ type: 'patches', componentId, patches });
     try {
-      this.rustBroker.sendToConnection(connectionId, msg);
+      this.rustBroker.sendToConnection(connection_id, msg);
     } catch (e) {
       console.error('Failed sending patches via broker:', e);
     }
   }
 
   private async handleWebSocketMessage(
-    connectionId: string,
+    connection_id: string,
     message: any,
     ws: WebSocket
   ): Promise<void> {
@@ -408,22 +426,17 @@ export class LiveTSServer {
     try {
       if (this.rustEngine && typeof this.rustEngine.renderComponent === 'function') {
         const result = this.rustEngine.renderComponent(componentId, oldHtml, newHtml);
+
+        // The Rust engine now returns a JSON string
         if (typeof result === 'string') {
           try {
             return JSON.parse(result);
-          } catch {}
+          } catch (parseError) {
+            console.warn('Failed to parse Rust engine result as JSON:', parseError);
+          }
         }
-        // Buffer or Uint8Array
-        if (
-          typeof Buffer !== 'undefined' &&
-          (Buffer.isBuffer(result) || result?.constructor?.name === 'Uint8Array')
-        ) {
-          try {
-            const buf: Buffer = Buffer.isBuffer(result) ? result : Buffer.from(result);
-            return JSON.parse(buf.toString('utf-8'));
-          } catch {}
-        }
-        // Already an object/array
+
+        // Already an object/array (for backwards compatibility)
         if (Array.isArray(result)) return result;
       }
     } catch (e) {

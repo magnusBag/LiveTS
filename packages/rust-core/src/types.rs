@@ -82,9 +82,16 @@ pub enum InsertPosition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
-    Patches { patches: Vec<DomPatch> },
-    Event { event: ClientEvent },
-    PubSub { channel: String, data: serde_json::Value },
+    Patches {
+        patches: Vec<DomPatch>,
+    },
+    Event {
+        event: ClientEvent,
+    },
+    PubSub {
+        channel: String,
+        data: serde_json::Value,
+    },
     Ping,
     Pong,
 }
@@ -94,22 +101,22 @@ pub enum WebSocketMessage {
 pub enum LiveTSError {
     #[error("Connection not found: {0}")]
     ConnectionNotFound(String),
-    
+
     #[error("Component not found: {0}")]
     ComponentNotFound(String),
-    
+
     #[error("WebSocket error: {0}")]
     WebSocketError(String),
-    
+
     #[error("HTML parsing error: {0}")]
     HtmlParsingError(String),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(String),
-    
+
     #[error("Event routing error: {0}")]
     EventRoutingError(String),
-    
+
     #[error("PubSub error: {0}")]
     PubSubError(String),
 }

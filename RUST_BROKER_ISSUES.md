@@ -63,7 +63,7 @@ The Rust WebSocket broker appears to be working correctly on the Rust side, but 
 #### NAPI-RS Configuration
 
 - **Queue Size**: Tested with both `0` and `1024` - no difference
-- **Call Mode**: Tested both `NonBlocking` and `Blocking` - no difference
+- **Call Mode**: Tested both `NonBlocking` and `Blocking` - no difference, so we use NonBlocking
 - **Error Handling**: Proper error handling implemented, no errors reported
 
 #### Code Structure
@@ -113,12 +113,14 @@ this.rustBroker.setEventHandler((...args: any[]) => {
 
 **Temporary Solution**: Disable Rust broker and fall back to Node.js WebSocket server
 
+THIS IS A TEMPORARY WORKAROUND
 ```typescript
 // In server.ts constructor:
 // Temporarily disable Rust broker due to NAPI threadsafe function bug
 console.log('⚠️  Temporarily using Node.js WebSocket server instead of Rust broker');
 this.rustBroker = undefined;
 ```
+
 
 ### Impact
 
@@ -131,10 +133,9 @@ this.rustBroker = undefined;
 
 #### Immediate Actions
 
-1. **Test with Different NAPI-RS Versions**: Try downgrading/upgrading NAPI-RS
-2. **Minimal Reproduction**: Create a simple test case outside LiveTS
-3. **NAPI-RS Community**: Report the issue to NAPI-RS maintainers
-4. **Alternative Threading Models**: Explore different callback mechanisms
+1. **Minimal Reproduction**: Create a simple test case outside LiveTS
+2. **NAPI-RS Community**: Report the issue to NAPI-RS maintainers
+3. **Alternative Threading Models**: Explore different callback mechanisms
 
 #### Potential Root Causes
 
@@ -169,6 +170,6 @@ This issue was discovered during LiveTS development. The Rust broker functionali
 
 ---
 
-**Status**: 🚨 **CRITICAL** - Blocking Rust broker functionality  
-**Priority**: **HIGH** - Core feature broken  
+**Status**: 🚨 **CRITICAL** - Blocking Rust broker functionality
+**Priority**: **HIGH** - Core feature broken
 **Workaround**: ✅ Node.js WebSocket fallback available

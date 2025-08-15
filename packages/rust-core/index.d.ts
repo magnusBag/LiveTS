@@ -9,7 +9,7 @@ export declare class LiveTsEngine {
   /** Creates a new LiveTS engine instance */
   constructor()
   /** Renders a component and returns the diff patches */
-  renderComponent(componentId: string, oldHtml: string, newHtml: string): Array<number>
+  renderComponent(componentId: string, oldHtml: string, newHtml: string): string
 }
 export type LiveTSWebSocketBroker = LiveTsWebSocketBroker
 /** Tokio-based WebSocket broker running inside the Rust core */

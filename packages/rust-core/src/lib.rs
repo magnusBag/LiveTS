@@ -57,13 +57,13 @@ impl LiveTSEngine {
         _component_id: String,
         old_html: String,
         new_html: String,
-    ) -> napi::Result<Vec<u8>> {
+    ) -> napi::Result<String> {
         let patches = self
             .html_differ
             .diff(&old_html, &new_html)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
-        let serialized = serde_json::to_vec(&patches)
+        let serialized = serde_json::to_string(&patches)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
         Ok(serialized)
@@ -92,9 +92,9 @@ pub struct LiveTSWebSocketBroker {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum BrokerEvent {
-    Connected { connectionId: String },
-    Message { connectionId: String, data: String },
-    Closed { connectionId: String },
+    Connected { connection_id: String },
+    Message { connection_id: String, data: String },
+    Closed { connection_id: String },
 }
 
 #[napi]
@@ -105,7 +105,7 @@ impl LiveTSWebSocketBroker {
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::INFO)
             .try_init();
-            
+
         println!("🦀 Initializing LiveTS WebSocket Broker");
         let rt = Runtime::new().map_err(|e| napi::Error::from_reason(e.to_string()))?;
         Ok(Self {
@@ -120,16 +120,10 @@ impl LiveTSWebSocketBroker {
     /// Register a JS callback that receives broker events as JSON strings
     #[napi]
     pub fn set_event_handler(&self, _env: Env, callback: JsFunction) -> NapiResult<()> {
-        println!("🎯 Setting up event handler (working version)...");
-        
         let tsfn: ThreadsafeFunction<String> = callback.create_threadsafe_function(0, |ctx: napi::threadsafe_function::ThreadSafeCallContext<String>| {
-            println!("🔄 JS callback called with value: {:?}", ctx.value);
-            
-            // The bug seems to be that the return value mechanism is broken
-            // Let's return an empty vector to see if that fixes it
+            // Create the JS string and return it as an argument to the callback
             match ctx.env.create_string(&ctx.value) {
                 Ok(js_string) => {
-                    println!("✅ Successfully created JS string, returning it");
                     Ok(vec![js_string])
                 }
                 Err(e) => {
@@ -138,7 +132,7 @@ impl LiveTSWebSocketBroker {
                 }
             }
         })?;
-        
+
         self.event_handler.insert("handler", tsfn);
         println!("✅ Event handler registered successfully");
         Ok(())
@@ -155,8 +149,6 @@ impl LiveTSWebSocketBroker {
 
         let handle = rt.spawn(async move {
             let listener = TcpListener::bind(&addr).await.expect("bind tcp");
-            tracing::info!("LiveTS WS broker listening on {}", addr);
-
             loop {
                 if shutdown.get("stop").map(|e| *e.value()).unwrap_or(false) {
                     tracing::info!("Shutting down WS broker listener");
@@ -252,15 +244,12 @@ async fn handle_connection(
     tracing::info!("WS connected: {}", connection_id);
 
     if let Some(tsfn) = &handler {
-        let evt = BrokerEvent::Connected { connectionId: connection_id.clone() };
+        let evt = BrokerEvent::Connected { connection_id: connection_id.clone() };
         match serde_json::to_string(&evt) {
             Ok(json) => {
-                println!("🚀 Sending Connected event: {}", json);
-                let status = tsfn.call(Ok(json), ThreadsafeFunctionCallMode::Blocking);
+                let status = tsfn.call(Ok(json), ThreadsafeFunctionCallMode::NonBlocking);
                 if status != napi::Status::Ok {
                     println!("❌ Failed to call JS handler for Connected: {:?}", status);
-                } else {
-                    println!("✅ Successfully called JS handler for Connected");
                 }
             }
             Err(e) => {
@@ -296,15 +285,12 @@ async fn handle_connection(
                     Some(Ok(tokio_tungstenite::tungstenite::Message::Text(text))) => {
                         let _ = connections.update_ping(&connection_id);
                         if let Some(tsfn) = &handler {
-                            let evt = BrokerEvent::Message { connectionId: connection_id.clone(), data: text };
+                            let evt = BrokerEvent::Message { connection_id: connection_id.clone(), data: text };
                             match serde_json::to_string(&evt) {
                                 Ok(json) => {
-                                    println!("📨 Sending Message event: {}", json);
-                                    let status = tsfn.call(Ok(json), ThreadsafeFunctionCallMode::Blocking);
+                                    let status = tsfn.call(Ok(json), ThreadsafeFunctionCallMode::NonBlocking);
                                     if status != napi::Status::Ok {
                                         println!("❌ Failed to call JS handler for Message: {:?}", status);
-                                    } else {
-                                        println!("✅ Successfully called JS handler for Message");
                                     }
                                 }
                                 Err(e) => {
@@ -354,11 +340,11 @@ async fn handle_connection(
     if should_remove {
         let _ = connections.remove_connection(&connection_id);
         if let Some(tsfn) = &handler {
-            let evt = BrokerEvent::Closed { connectionId: connection_id.clone() };
+            let evt = BrokerEvent::Closed { connection_id: connection_id.clone() };
             match serde_json::to_string(&evt) {
                 Ok(json) => {
                     tracing::info!("🔌 Sending Closed event: {}", json);
-                    let status = tsfn.call(Ok(json), ThreadsafeFunctionCallMode::Blocking);
+                    let status = tsfn.call(Ok(json), ThreadsafeFunctionCallMode::NonBlocking);
                     if status != napi::Status::Ok {
                         tracing::error!("❌ Failed to call JS handler for Closed: {:?}", status);
                     }
