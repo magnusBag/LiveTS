@@ -1,0 +1,177 @@
+{
+  "scopeName": "livets.html.injection",
+  "injectionSelector": "L:source.ts -string -comment",
+  "patterns": [
+    {
+      "name": "meta.template.html.livets",
+      "begin": "\\bhtml\\s*`",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template.begin.livets"
+        }
+      },
+      "end": "`",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template.end.livets"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#template-substitution-element"
+        },
+        {
+          "include": "#html-content"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "template-substitution-element": {
+      "name": "meta.template.expression.livets",
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.livets"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.livets"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.ts#expression"
+        }
+      ]
+    },
+    "html-content": {
+      "patterns": [
+        {
+          "include": "#livets-attributes"
+        },
+        {
+          "include": "text.html.basic"
+        }
+      ]
+    },
+    "livets-attributes": {
+      "patterns": [
+        {
+          "name": "meta.attribute-with-value.livets-event.html",
+          "begin": "\\s+(ts-on:)(\\w+)(=)",
+          "beginCaptures": {
+            "1": {
+              "name": "support.type.property-name.livets-event.html"
+            },
+            "2": {
+              "name": "support.type.property-name.event.livets.html"
+            },
+            "3": {
+              "name": "punctuation.separator.key-value.html"
+            }
+          },
+          "end": "(?<='|\"|`)\\s",
+          "patterns": [
+            {
+              "name": "string.quoted.double.livets-event.html",
+              "begin": "\"",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.begin.html"
+                }
+              },
+              "end": "\"",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.end.html"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "support.function.livets-handler.html",
+                  "match": "\\b[a-zA-Z_$][a-zA-Z0-9_$]*\\b"
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.livets-event.html",
+              "begin": "'",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.begin.html"
+                }
+              },
+              "end": "'",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.end.html"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "support.function.livets-handler.html",
+                  "match": "\\b[a-zA-Z_$][a-zA-Z0-9_$]*\\b"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "entity.other.attribute-name.livets-data.html",
+          "match": "\\s+(data-ts-\\w+)(?==)",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name.livets-data.html"
+            }
+          }
+        },
+        {
+          "name": "meta.attribute-with-value.class.html",
+          "begin": "\\s+(class)(=)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.other.attribute-name.html"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.html"
+            }
+          },
+          "end": "(?<='|\"|`)\\s",
+          "patterns": [
+            {
+              "name": "string.quoted.double.html",
+              "begin": "\"",
+              "end": "\"",
+              "patterns": [
+                {
+                  "include": "#template-substitution-element"
+                },
+                {
+                  "name": "entity.other.attribute-value.html",
+                  "match": "[^\"$]+"
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.html",
+              "begin": "'",
+              "end": "'",
+              "patterns": [
+                {
+                  "include": "#template-substitution-element"
+                },
+                {
+                  "name": "entity.other.attribute-value.html",
+                  "match": "[^'$]+"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
