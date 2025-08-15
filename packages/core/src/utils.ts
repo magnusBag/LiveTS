@@ -2,7 +2,7 @@
  * Utility functions for LiveTS
  */
 
-import type { ComponentProps } from './types';
+import type { ComponentId } from './types';
 
 /**
  * Escapes HTML to prevent XSS attacks
@@ -193,4 +193,105 @@ export function isBrowser(): boolean {
  */
 export function isServer(): boolean {
   return !isBrowser();
+}
+
+/**
+ * Injects data-ts-selector attributes into reactive HTML elements
+ * Identifies elements with ts-on: attributes and common reactive patterns
+ */
+export function injectReactiveSelectors(html: string, componentId: ComponentId): string {
+  let selectorCounter = 0;
+
+  // Add selectors to elements with ts-on: attributes (these are clearly reactive)
+  let processedHtml = html.replace(
+    /<([a-zA-Z][a-zA-Z0-9-]*)\s+([^>]*?ts-on:[^>]*?)>/g,
+    (match, tagName, attributes) => {
+      // Check if already has data-ts-selector
+      if (attributes.includes('data-ts-sel=')) {
+        return match;
+      }
+
+      const selector = `${componentId}-sel-${selectorCounter++}`;
+      return `<${tagName} data-ts-sel="${selector}" ${attributes}>`;
+    }
+  );
+
+  return processedHtml;
+}
+
+/**
+ * Enhanced version that also marks elements likely to contain reactive content
+ * This should be called with component instance context for better detection
+ */
+export function injectReactiveSelectorsSmart(
+  html: string,
+  componentId: ComponentId,
+  stateKeys: string[] = []
+): string {
+  let selectorCounter = 0;
+
+  // Create a short component hash (8 chars instead of 36 char UUID)
+  const componentHash = createShortHash(componentId);
+
+  // Process all elements that need selectors in one pass
+  // This avoids the issue of elements with both ts-on and class attributes
+  let processedHtml = html.replace(
+    /<([a-zA-Z][a-zA-Z0-9-]*)([\s\S]*?)>/g,
+    (match, tagName, attributes) => {
+      // Skip if already has data-ts-selector
+      if (attributes.includes('data-ts-sel=')) {
+        return match;
+      }
+
+      // Add selector if element has ts-on: attributes OR class attributes
+      const hasInteraction = attributes.includes('ts-on:');
+      const hasClass = attributes.includes('class=');
+
+      if (hasInteraction || hasClass) {
+        // Ultra-short selector: 8-char hash + base36 counter
+        const selector = `${componentHash}.${selectorCounter.toString(36)}`;
+        selectorCounter++; // Increment counter for next element
+        return `<${tagName} data-ts-sel="${selector}"${attributes}>`;
+      }
+
+      return match;
+    }
+  );
+
+  return processedHtml;
+}
+
+/**
+ * Creates a short hash from a longer string (like UUID)
+ * Uses base36 encoding for maximum compactness while staying readable
+ */
+function createShortHash(input: string): string {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  // Convert to base36 and take first 8 characters, ensure positive
+  return Math.abs(hash).toString(36).substring(0, 8).padStart(8, '0');
+}
+
+/**
+ * Calculates size savings from using compact format
+ */
+export function calculateSavings(
+  verbose: any[],
+  compact: string[]
+): {
+  verboseSize: number;
+  compactSize: number;
+  savings: number;
+  percentage: number;
+} {
+  const verboseSize = JSON.stringify(verbose).length;
+  const compactSize = compact.length;
+  const savings = verboseSize - compactSize;
+  const percentage = Math.round((savings / verboseSize) * 100);
+
+  return { verboseSize, compactSize, savings, percentage };
 }

@@ -21,7 +21,7 @@ export class CounterComponent extends LiveView {
     // Initialize component state
     this.setState({
       count: 0,
-      step: 1,
+      step: 1
     });
 
     // Subscribe to pub/sub events (example)
@@ -47,13 +47,12 @@ export class CounterComponent extends LiveView {
         <h1 class="text-2xl font-bold text-center mb-6">LiveTS Counter</h1>
 
         <div class="text-center mb-6">
-          <div id="counter-display" class="${counterClasses}">${count}</div>
+          <div class="${counterClasses}">${count}</div>
           <p class="text-gray-600 mt-2">Current count</p>
         </div>
 
         <div class="flex gap-3 justify-center mb-6">
           <button
-            id="decrement-btn"
             ts-on:click="decrement"
             class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
           >
@@ -61,7 +60,6 @@ export class CounterComponent extends LiveView {
           </button>
 
           <button
-            id="increment-btn"
             ts-on:click="increment"
             class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
           >
@@ -109,13 +107,13 @@ export class CounterComponent extends LiveView {
   // Event handlers
   increment(): void {
     this.setState({
-      count: this.state.count + this.state.step,
+      count: this.state.count + this.state.step
     });
   }
 
   decrement(): void {
     this.setState({
-      count: this.state.count - this.state.step,
+      count: this.state.count - this.state.step
     });
   }
 

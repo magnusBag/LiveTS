@@ -2,6 +2,8 @@
  * Type definitions for the LiveTS framework
  */
 
+import type { Hono } from 'hono';
+
 export interface LiveViewState {
   [key: string]: any;
 }
@@ -40,11 +42,7 @@ export interface LiveViewOptions {
 export interface ServerOptions {
   port?: number;
   host?: string;
-  cors?: boolean;
-  static?: {
-    root: string;
-    prefix?: string;
-  };
+  app: Hono;
 }
 
 export interface RenderOptions {
@@ -53,6 +51,11 @@ export interface RenderOptions {
   meta?: Record<string, string>;
   scripts?: string[];
   styles?: string[];
+}
+
+export interface ComponentRouteConfig<T = any> {
+  ComponentClass: new (props?: ComponentProps) => T;
+  renderOptions?: RenderOptions;
 }
 
 export interface PubSubMessage {
@@ -77,6 +80,8 @@ export interface DomPatch {
   html?: string; // For ReplaceInnerHtml
   element?: string; // For ReplaceElement
 }
+
+// Compact patch types removed - now generated directly by Rust core
 
 export type EventHandler = (event: string, payload: EventPayload) => void | Promise<void>;
 export type PubSubHandler = (data: any) => void | Promise<void>;

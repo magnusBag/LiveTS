@@ -68,6 +68,62 @@ impl LiveTSEngine {
 
         Ok(serialized)
     }
+
+    /// Renders a component and returns compact string patches for ultra-efficient WebSocket transmission
+    #[napi]
+    pub fn render_component_compact(
+        &self,
+        _component_id: String,
+        old_html: String,
+        new_html: String,
+    ) -> napi::Result<String> {
+        let patches = self
+            .html_differ
+            .diff(&old_html, &new_html)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        // Convert patches to compact string format
+        let compact_patches = self
+            .html_differ
+            .patches_to_compact(patches);
+
+        let serialized = serde_json::to_string(&compact_patches)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        Ok(serialized)
+    }
+
+    /// Renders a component and returns complete ultra-compact WebSocket message
+    /// This eliminates ALL JSON operations in TypeScript layer
+    #[napi]
+    pub fn render_component_message(
+        &self,
+        component_id: String,
+        old_html: String,
+        new_html: String,
+    ) -> napi::Result<String> {
+        let patches = self
+            .html_differ
+            .diff(&old_html, &new_html)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        // Convert patches to compact string format
+        let compact_patches = self
+            .html_differ
+            .patches_to_compact(patches);
+
+        // Build complete WebSocket message using direct string formatting
+        let short_id = &component_id[..8.min(component_id.len())];
+        let patches_str = compact_patches
+            .iter()
+            .map(|p| format!("\"{}\"", p))
+            .collect::<Vec<_>>()
+            .join(",");
+        
+        let message = format!(r#"{{"t":"p","c":"{}","d":[{}]}}"#, short_id, patches_str);
+        
+        Ok(message)
+    }
 }
 
 impl Default for LiveTSEngine {
@@ -232,7 +288,7 @@ async fn handle_connection(
 
     // assign a session id
     let connection_id = Uuid::new_v4().to_string();
-    let mut should_remove = false;
+    let should_remove;
 
     // register in connection manager and attach sender
     if let Err(e) = connections.add_connection(connection_id.clone()) {

@@ -3,6 +3,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { injectReactiveSelectorsSmart } from './utils';
 import type {
   LiveViewState,
   EventPayload,
@@ -234,7 +235,11 @@ export abstract class LiveView {
 
     try {
       const html = this.render();
-      return this.wrapWithComponentId(html);
+      // Inject reactive selectors before wrapping with component ID
+      // Pass state keys to help identify reactive elements
+      const stateKeys = Object.keys(this.state);
+      const htmlWithSelectors = injectReactiveSelectorsSmart(html, this.componentId, stateKeys);
+      return this.wrapWithComponentId(htmlWithSelectors);
     } catch (error) {
       console.error(`Error rendering component ${this.componentId}:`, error);
       throw error;

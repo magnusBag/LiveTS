@@ -1,6 +1,6 @@
 {
   "name": "@magnusbag/livets-client",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "Client-side connector for LiveTS framework - real-time server-rendered web applications",
   "main": "dist/connector.js",
