@@ -2,10 +2,10 @@
  * LiveTS Server - HTTP and WebSocket server for LiveTS applications
  */
 
-import { Hono } from 'hono';
+import { Context, Hono } from 'hono';
 import { readFileSync } from 'fs';
 import { LiveView } from './live-view';
-import type { ServerOptions, ComponentProps, RenderOptions } from './types';
+import type { ServerOptions, ComponentProps, RenderOptions, ComponentFactory } from './types';
 
 // Import the Rust core engine types
 import type { LiveTsEngine, LiveTsWebSocketBroker } from '@magnusbag/livets-rust-core';
@@ -80,14 +80,40 @@ export class LiveTSServer {
   }
 
   /**
-   * Registers a LiveView component with a simple path-based route
+   * Registers a LiveView component with a simple class constructor
    */
   registerComponent<T extends LiveView>(
     path: string,
     ComponentClass: new (props?: ComponentProps) => T,
     options?: RenderOptions
+  ): void;
+
+  /**
+   * Registers a LiveView component with a factory function that receives route context
+   */
+  registerComponent<T extends LiveView>(
+    path: string,
+    componentFactory: ComponentFactory<T>,
+    options?: RenderOptions
+  ): void;
+
+  registerComponent<T extends LiveView>(
+    path: string,
+    componentFactory: ComponentFactory<T> | (new (props?: ComponentProps) => T),
+    options?: RenderOptions
   ): void {
-    this.registerSimpleComponent(path, ComponentClass, options);
+    // Check if it's a factory function or a class constructor
+    if (typeof componentFactory === 'function' && componentFactory.length > 0) {
+      // It's a factory function that takes a context parameter
+      this.registerParameterizedComponent(path, componentFactory as ComponentFactory<T>, options);
+    } else {
+      // It's a class constructor
+      this.registerSimpleComponent(
+        path,
+        componentFactory as new (props?: ComponentProps) => T,
+        options
+      );
+    }
   }
 
   private registerSimpleComponent<T extends LiveView>(
@@ -101,6 +127,49 @@ export class LiveTSServer {
       try {
         const props = this.extractPropsFromContext(c);
         const component = new ComponentClass(props);
+
+        // Mount the component
+        await component._mount();
+
+        // Store active component
+        this.activeComponents.set(component.getComponentId(), component);
+
+        // Render the component
+        const html = component._render();
+
+        // Cache component HTML in Rust for Phase 2 optimization
+        if (this.rustEngine && typeof this.rustEngine.cacheComponentHtml === 'function') {
+          try {
+            this.rustEngine.cacheComponentHtml(component.getComponentId(), html);
+          } catch (e) {
+            console.warn(`Failed to cache HTML for component ${component.getComponentId()}:`, e);
+          }
+        }
+
+        // Cache the initial HTML for diffing
+        this.componentHtmlCache.set(component.getComponentId(), html);
+
+        const fullHtml = this.wrapInLayout(html, options);
+
+        return c.html(fullHtml);
+      } catch (error) {
+        console.error(`Error rendering component for ${path}:`, error);
+        return c.text('Internal Server Error', 500 as any);
+      }
+    });
+  }
+
+  private registerParameterizedComponent<T extends LiveView>(
+    path: string,
+    componentFactory: ComponentFactory<T>,
+    options?: RenderOptions
+  ): void {
+    this.app.get(path, async c => {
+      try {
+        // Create enhanced context with parameter extraction
+
+        // Call the factory function with the context
+        const component = componentFactory(c);
 
         // Mount the component
         await component._mount();

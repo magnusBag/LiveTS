@@ -23,13 +23,14 @@ export class CounterComponent extends LiveView {
       count: 0,
       step: 1
     });
+    console.log('Counter component mounted');
 
     // Subscribe to pub/sub events (example)
     this.subscribe('counter-updates', data => {
       console.log('Received counter update:', data);
     });
 
-    console.log('Counter component mounted');
+    console.log('Counter component mounted', JSON.stringify(this.props));
   }
 
   render(): string {

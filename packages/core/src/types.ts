@@ -2,7 +2,16 @@
  * Type definitions for the LiveTS framework
  */
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
+
+// Forward declaration to avoid circular dependency
+export interface LiveView {
+  getComponentId(): string;
+  _mount(): Promise<void>;
+  _render(): string;
+  handleEvent(eventName: string, payload: any): void | Promise<void>;
+  _unmount(): Promise<void>;
+}
 
 export interface LiveViewState {
   [key: string]: any;
@@ -57,6 +66,8 @@ export interface ComponentRouteConfig<T = any> {
   ComponentClass: new (props?: ComponentProps) => T;
   renderOptions?: RenderOptions;
 }
+
+export type ComponentFactory<T extends LiveView = LiveView> = (context: Context) => T;
 
 export interface PubSubMessage {
   channel: string;

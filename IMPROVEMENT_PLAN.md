@@ -477,9 +477,11 @@ class PersistentComponent extends LiveView {
 
 ```typescript
 // Route definition
-app.get('/dashboard/:id', c => {
-  return renderLiveView(DashboardComponent, {
-    userId: c.req.param('id')
+server.registerComponent('/:userId/:tab', c => {
+  CounterComponent({
+    userId: c.req.param('userId'),
+    tab: c.req.param('tab'),
+    styles: ['https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css']
   });
 });
 
