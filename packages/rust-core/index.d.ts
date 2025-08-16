@@ -17,6 +17,33 @@ export declare class LiveTsEngine {
    * This eliminates ALL JSON operations in TypeScript layer
    */
   renderComponentMessage(componentId: string, oldHtml: string, newHtml: string): string
+  /**
+   * Parse WebSocket event message directly in Rust (Phase 1 optimization)
+   * This eliminates Node.js parsing overhead and reduces FFI crossings
+   */
+  parseEventMessage(rawMessage: string): string
+  /** Fast check if message is a ping (avoids parsing overhead) */
+  isPingMessage(rawMessage: string): boolean
+  /** Set the TypeScript event processor callback */
+  setEventProcessor(callback: (...args: any[]) => any): NapiResult
+  /**
+   * Parse event and prepare for processing (Phase 2 step 1)
+   * Returns parsed event data with cached HTML for TypeScript processing
+   */
+  parseEventAndGetCache(rawMessage: string): string
+  /**
+   * Process response and generate message (Phase 2 step 2)
+   * Takes new HTML from TypeScript and generates optimized diff response
+   */
+  processResponseAndGenerateMessage(componentId: string, oldHtml: string, newHtml: string): string
+  /** Cache component HTML (useful for initial renders) */
+  cacheComponentHtml(componentId: string, html: string): void
+  /** Get cached component HTML */
+  getCachedHtml(componentId: string): string | null
+  /** Remove component from cache */
+  removeComponentCache(componentId: string): boolean
+  /** Get cache statistics */
+  getCacheStats(): string
 }
 export type LiveTSWebSocketBroker = LiveTsWebSocketBroker
 /** Tokio-based WebSocket broker running inside the Rust core */

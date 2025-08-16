@@ -22,12 +22,70 @@ pub struct ClientEvent {
     pub target: Option<EventTarget>,
 }
 
+/// Optimized compact event format for high-performance parsing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactEvent {
+    pub component_id: String,
+    pub event_name: String,
+    pub value: String,
+    pub checked: bool,
+    pub tag_name: String,
+}
+
+/// Parsed event ready for processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedEvent {
+    pub component_id: String,
+    pub event_name: String,
+    pub event_data: EventData,
+}
+
+/// Event data extracted from client
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventData {
+    pub event_type: String,
+    pub target: EventTarget,
+}
+
+/// Event parsing result
+#[derive(Debug, Clone)]
+pub enum EventParseResult {
+    Compact(CompactEvent),
+    Json(ClientEvent),
+    Invalid(String),
+}
+
+/// Component HTML cache entry
+#[derive(Debug, Clone)]
+pub struct CachedComponent {
+    pub component_id: String,
+    pub current_html: String,
+    pub last_updated: u64,
+}
+
+/// Event processing request for TypeScript callback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventProcessingRequest {
+    pub component_id: String,
+    pub event_name: String,
+    pub event_data: EventData,
+}
+
+/// Event processing response from TypeScript
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventProcessingResponse {
+    pub success: bool,
+    pub new_html: String,
+    pub error: Option<String>,
+}
+
 /// Information about the DOM element that triggered the event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventTarget {
     pub tag_name: String,
     pub attributes: HashMap<String, String>,
     pub value: Option<String>,
+    pub checked: Option<bool>,
 }
 
 /// DOM patch operation for updating the client-side DOM
@@ -119,6 +177,9 @@ pub enum LiveTSError {
 
     #[error("PubSub error: {0}")]
     PubSubError(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
 }
 
 pub type Result<T> = std::result::Result<T, LiveTSError>;

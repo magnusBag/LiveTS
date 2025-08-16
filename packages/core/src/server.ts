@@ -43,6 +43,17 @@ export class LiveTSServer {
     // Initialize Rust engine/broker if available
     if (LiveTSEngine) {
       this.rustEngine = new LiveTSEngine();
+
+      // Set up optimized event processor callback for Phase 2 optimization
+      if (typeof this.rustEngine.setEventProcessor === 'function') {
+        try {
+          this.rustEngine.setEventProcessor((requestJson: string) => {
+            return this.handleEventProcessingRequest(requestJson);
+          });
+        } catch (e) {
+          console.warn('Failed to set up optimized event processor:', e);
+        }
+      }
     } else {
       console.log('📝 Using JavaScript fallback for DOM manipulation');
     }
@@ -99,6 +110,15 @@ export class LiveTSServer {
 
         // Render the component
         const html = component._render();
+
+        // Cache component HTML in Rust for Phase 2 optimization
+        if (this.rustEngine && typeof this.rustEngine.cacheComponentHtml === 'function') {
+          try {
+            this.rustEngine.cacheComponentHtml(component.getComponentId(), html);
+          } catch (e) {
+            console.warn(`Failed to cache HTML for component ${component.getComponentId()}:`, e);
+          }
+        }
 
         // Cache the initial HTML for diffing
         this.componentHtmlCache.set(component.getComponentId(), html);
@@ -212,18 +232,55 @@ export class LiveTSServer {
           break;
         case 'Message': {
           const { connection_id, data } = evt;
-          // Ultra-fast path for compact formats (no JSON parsing needed)
+
+          // Phase 2 Optimization: Two-step processing (1 FFI crossing for business logic!)
+          if (this.rustEngine && typeof this.rustEngine.parseEventAndGetCache === 'function') {
+            // Fast ping check in Rust
+            if (this.rustEngine.isPingMessage(data)) {
+              return; // Skip ping processing
+            }
+
+            try {
+              // Step 1: Parse event and get cached HTML in Rust (no FFI)
+              const eventDataJson = this.rustEngine.parseEventAndGetCache(data);
+              const eventData = JSON.parse(eventDataJson);
+
+              // Step 2: Process business logic in TypeScript (1 FFI crossing)
+              const responseJson = await this.handleEventProcessingRequest(eventDataJson);
+              const response = JSON.parse(responseJson);
+
+              if (
+                response.success &&
+                typeof this.rustEngine.processResponseAndGenerateMessage === 'function'
+              ) {
+                // Step 3: Generate diff and message in Rust (no FFI)
+                const responseMessage = this.rustEngine.processResponseAndGenerateMessage(
+                  eventData.component_id,
+                  eventData.old_html,
+                  response.new_html
+                );
+
+                // Send the response directly via broker
+                try {
+                  this.rustBroker?.sendToConnection(connection_id, responseMessage);
+                } catch (e) {
+                  console.error('Failed sending optimized response via broker:', e);
+                }
+                return;
+              }
+            } catch (e) {
+              console.warn('Rust optimized processing failed, falling back:', e);
+            }
+          }
+
+          // Fallback to original parsing logic for compatibility
           if (data === '"p"') {
-            // Compact ping - just ignore (broker handles internally)
             return;
           } else if (data.startsWith('"e|')) {
-            // Compact event format: "e|shortId|eventName|value|checked|tagName"
             await this.handleCompactEvent(connection_id, data);
           } else if (data.startsWith('{"type":"event"')) {
-            // Legacy JSON event format (fallback)
             await this.handleEventMessageDirect(connection_id, data);
           } else {
-            // Other message types - use JSON parsing
             const message = JSON.parse(data);
             await this.handleBrokerMessage(connection_id, message);
           }
@@ -368,6 +425,97 @@ export class LiveTSServer {
         break;
       default:
         console.warn(`Unknown broker message type: ${message.type}`);
+    }
+  }
+
+  private async handleRustParsedEvent(connection_id: string, parsedEvent: any): Promise<void> {
+    const { component_id, event_name, event_data } = parsedEvent;
+
+    // Convert Rust-parsed event to our internal format
+    const payload = {
+      type: event_data.event_type,
+      target: {
+        tagName: event_data.target.tag_name,
+        value: event_data.target.value,
+        checked: event_data.target.checked,
+        dataset: event_data.target.attributes || {}
+      }
+    };
+
+    // Track registration to avoid duplicates
+    let set = this.brokerConnComponents.get(connection_id);
+    if (!set) {
+      set = new Set();
+      this.brokerConnComponents.set(connection_id, set);
+    }
+    if (!set.has(component_id)) {
+      try {
+        this.rustBroker?.registerComponent(component_id, connection_id);
+      } catch {}
+      set.add(component_id);
+    }
+
+    const compactMsg = await this.processEventAndGenerateMessage(component_id, event_name, payload);
+    if (!compactMsg) return;
+
+    try {
+      this.rustBroker?.sendToConnection(connection_id, compactMsg);
+    } catch (e) {
+      console.error('Failed sending patches via broker:', e);
+    }
+  }
+
+  private async handleEventProcessingRequest(requestJson: string): Promise<string> {
+    try {
+      const request = JSON.parse(requestJson);
+      const { component_id, event_name, event_data } = request;
+
+      // Convert to our internal payload format
+      const payload = {
+        type: event_data.event_type,
+        target: {
+          tagName: event_data.target.tag_name,
+          value: event_data.target.value,
+          checked: event_data.target.checked,
+          dataset: event_data.target.attributes || {}
+        }
+      };
+
+      // Find the component and process the event
+      const component = this.activeComponents.get(component_id);
+      if (!component) {
+        return JSON.stringify({
+          success: false,
+          new_html: '',
+          error: `Component not found: ${component_id}`
+        });
+      }
+
+      try {
+        // Process the event
+        await Promise.resolve(component.handleEvent(event_name, payload));
+
+        // Generate new HTML
+        const newHtml = component._render();
+
+        return JSON.stringify({
+          success: true,
+          new_html: newHtml,
+          error: null
+        });
+      } catch (e) {
+        return JSON.stringify({
+          success: false,
+          new_html: '',
+          error: `Event processing failed: ${e instanceof Error ? e.message : String(e)}`
+        });
+      }
+    } catch (e) {
+      return JSON.stringify({
+        success: false,
+        new_html: '',
+        error: `Request parsing failed: ${e instanceof Error ? e.message : String(e)}`
+      });
     }
   }
 

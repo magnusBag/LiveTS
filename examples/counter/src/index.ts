@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { LiveTSServer } from '@livets/core';
+import { LiveTSServer } from '@magnusbag/livets-core';
 import { CounterComponent } from './counter-component';
 import { serve } from '@hono/node-server';
 

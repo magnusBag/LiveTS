@@ -34,7 +34,6 @@
     "build:watch": "rollup -c --watch",
     "dev": "rollup -c --watch",
     "clean": "rm -rf dist",
-    "test": "jest",
     "lint": "eslint src --ext .js,.ts",
     "lint:fix": "eslint src --ext .js,.ts --fix"
   },

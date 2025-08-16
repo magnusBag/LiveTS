@@ -10,15 +10,19 @@
 
 use napi_derive::napi;
 
+mod cache;
 mod connection;
 mod differ;
 mod events;
+mod parser;
 mod pubsub;
 mod types;
 
+pub use cache::ComponentCache;
 pub use connection::ConnectionManager;
 pub use differ::HtmlDiffer;
 pub use events::EventRouter;
+pub use parser::EventParser;
 pub use pubsub::PubSubSystem;
 pub use types::*;
 
@@ -38,6 +42,9 @@ use serde::{Serialize, Deserialize};
 #[napi]
 pub struct LiveTSEngine {
     html_differ: HtmlDiffer,
+    event_parser: EventParser,
+    component_cache: ComponentCache,
+    event_processor_callback: Option<ThreadsafeFunction<String>>,
 }
 
 #[napi]
@@ -47,6 +54,9 @@ impl LiveTSEngine {
     pub fn new() -> Self {
         Self {
             html_differ: HtmlDiffer::new(),
+            event_parser: EventParser::new(),
+            component_cache: ComponentCache::new(1000),
+            event_processor_callback: None,
         }
     }
 
@@ -123,6 +133,114 @@ impl LiveTSEngine {
         let message = format!(r#"{{"t":"p","c":"{}","d":[{}]}}"#, short_id, patches_str);
         
         Ok(message)
+    }
+
+    /// Parse WebSocket event message directly in Rust (Phase 1 optimization)
+    /// This eliminates Node.js parsing overhead and reduces FFI crossings
+    #[napi]
+    pub fn parse_event_message(&self, raw_message: String) -> napi::Result<String> {
+        match self.event_parser.parse_message(&raw_message) {
+            Ok(parsed_event) => {
+                // Validate the parsed event
+                if let Err(e) = self.event_parser.validate_event(&parsed_event) {
+                    return Err(napi::Error::from_reason(format!("Event validation failed: {}", e)));
+                }
+
+                // Serialize the parsed event for Node.js callback
+                match serde_json::to_string(&parsed_event) {
+                    Ok(json) => Ok(json),
+                    Err(e) => Err(napi::Error::from_reason(format!("Serialization failed: {}", e))),
+                }
+            }
+            Err(e) => Err(napi::Error::from_reason(format!("Event parsing failed: {}", e))),
+        }
+    }
+
+    /// Fast check if message is a ping (avoids parsing overhead)
+    #[napi]
+    pub fn is_ping_message(&self, raw_message: String) -> bool {
+        raw_message == "\"p\""
+    }
+
+    /// Set the TypeScript event processor callback
+    #[napi]
+    pub fn set_event_processor(&mut self, _env: Env, callback: JsFunction) -> NapiResult<()> {
+        let tsfn: ThreadsafeFunction<String> = callback.create_threadsafe_function(0, |ctx: napi::threadsafe_function::ThreadSafeCallContext<String>| {
+            match ctx.env.create_string(&ctx.value) {
+                Ok(js_string) => Ok(vec![js_string]),
+                Err(e) => Err(e),
+            }
+        })?;
+        
+        self.event_processor_callback = Some(tsfn);
+        Ok(())
+    }
+
+    /// Parse event and prepare for processing (Phase 2 step 1)
+    /// Returns parsed event data with cached HTML for TypeScript processing
+    #[napi]
+    pub fn parse_event_and_get_cache(&self, raw_message: String) -> napi::Result<String> {
+        // 1. Parse event in Rust (no FFI)
+        let parsed_event = match self.event_parser.parse_message(&raw_message) {
+            Ok(event) => event,
+            Err(e) => return Err(napi::Error::from_reason(format!("Parse failed: {}", e))),
+        };
+
+        // 2. Get cached HTML (no FFI)
+        let old_html = self.component_cache
+            .get_html(&parsed_event.component_id)
+            .unwrap_or_else(|| String::new());
+
+        // 3. Return structured data for TypeScript processing
+        let request_with_cache = serde_json::json!({
+            "component_id": parsed_event.component_id,
+            "event_name": parsed_event.event_name,
+            "event_data": parsed_event.event_data,
+            "old_html": old_html
+        });
+
+        Ok(request_with_cache.to_string())
+    }
+
+    /// Process response and generate message (Phase 2 step 2)
+    /// Takes new HTML from TypeScript and generates optimized diff response
+    #[napi]
+    pub fn process_response_and_generate_message(&self, component_id: String, old_html: String, new_html: String) -> napi::Result<String> {
+        // 1. Update cache with new HTML (no FFI)
+        self.component_cache.set_html(&component_id, new_html.clone());
+
+        // 2. Generate diff and compact message (no FFI)
+        let message = self
+            .render_component_message(component_id, old_html, new_html)
+            .map_err(|e| napi::Error::from_reason(format!("Diff generation failed: {}", e)))?;
+
+        Ok(message)
+    }
+
+    /// Cache component HTML (useful for initial renders)
+    #[napi]
+    pub fn cache_component_html(&self, component_id: String, html: String) {
+        self.component_cache.set_html(&component_id, html);
+    }
+
+    /// Get cached component HTML
+    #[napi]
+    pub fn get_cached_html(&self, component_id: String) -> Option<String> {
+        self.component_cache.get_html(&component_id)
+    }
+
+    /// Remove component from cache
+    #[napi]
+    pub fn remove_component_cache(&self, component_id: String) -> bool {
+        self.component_cache.remove_component(&component_id).is_some()
+    }
+
+    /// Get cache statistics
+    #[napi]
+    pub fn get_cache_stats(&self) -> napi::Result<String> {
+        let stats = self.component_cache.stats();
+        serde_json::to_string(&stats)
+            .map_err(|e| napi::Error::from_reason(format!("Stats serialization failed: {}", e)))
     }
 }
 
