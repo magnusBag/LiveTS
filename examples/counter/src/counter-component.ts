@@ -2,7 +2,7 @@
  * Counter Component - A simple LiveView example
  */
 
-import { LiveView, html, classNames } from '@livets/core';
+import { LiveView, html, classNames } from '@magnusbag/livets-core';
 
 interface CounterState {
   count: number;

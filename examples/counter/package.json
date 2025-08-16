@@ -1,19 +1,25 @@
 {
   "name": "livets-example-counter-simple",
   "version": "0.1.0",
-  "description": "Simplified LiveTS counter example - minimal boilerplate",
+  "description": "Simplified LiveTS counter example with Playwright testing",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "clean": "rm -rf dist"
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "clean": "rm -rf dist test-results playwright-report"
   },
   "dependencies": {
-    "@livets/core": "*",
-    "@livets/client": "*"
+    "@magnusbag/livets-core": "*",
+    "@magnusbag/livets-client": "*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.40.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }
