@@ -194,9 +194,43 @@ livets test --coverage --watch
 - ✅ Rust-powered HTML diffing
 - ✅ Compact WebSocket message format
 - ✅ Basic event delegation
-- ❌ Limited caching strategies
+- ✅ **NEW: Rust-native event parsing (Phase 1)**
+- ✅ **NEW: Rust component HTML cache (Phase 2)**
+- ✅ **NEW: Optimized FFI crossings (reduced from 4 to 1 per event)**
+- ❌ Limited advanced caching strategies
 - ❌ No memoization
 - ❌ No component-level optimizations
+
+### 🚀 **IMPLEMENTED: Major Performance Optimizations**
+
+#### **Phase 1: Rust-Native Event Parsing**
+
+- **✅ Implemented**: Event parsing moved from Node.js to Rust core
+- **Impact**: Eliminates 2 FFI crossings per event
+- **Benefits**:
+  - Ultra-fast compact event format parsing: `"e|shortId|eventName|value|checked|tagName"`
+  - Optimized JSON event parsing with regex fast-path
+  - Automatic ping message detection without parsing overhead
+
+#### **Phase 2: Rust Component HTML Cache**
+
+- **✅ Implemented**: Component HTML cache moved to Rust
+- **Impact**: Reduces FFI crossings from 4 to 1 per event
+- **Benefits**:
+  - Component state cached in Rust with LRU eviction
+  - HTML diffing happens entirely in Rust
+  - Only business logic requires TypeScript callback
+  - Massive reduction in data serialization overhead
+
+#### **Current Optimized Event Flow**
+
+```
+Event → Rust Parse → Rust Cache Lookup → 1 FFI (TypeScript logic) → Rust Diff → Rust Response
+```
+
+**Previous**: 4 FFI crossings per event  
+**Current**: 1 FFI crossing per event  
+**Performance Gain**: ~75% reduction in cross-language overhead
 
 ### Performance Enhancement Opportunities
 
